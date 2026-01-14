@@ -29,11 +29,7 @@ A comprehensive Bash-based diagnostic tool for macOS that automatically detects 
 
 ### **Supported macOS Versions**
 
-**Fully Supported:**
-- macOS 14 (Sonoma)
-- macOS 13 (Ventura)
-- macOS 12 (Monterey)
-- macOS 11 (Big Sur)
+**Tested on:**
 - macOS 10.15 (Catalina)
 
 **Note:** The script automatically installs Homebrew if not present and uses it to install any missing utilities.
@@ -782,7 +778,7 @@ For AWS-specific issues on EC2 Mac instances, the tool can automatically create 
 ## ⚠️ **Important Notes**
 
 - This utility requires sudo privileges for full diagnostics
-- Tested on macOS 10.15 (Catalina) through macOS 14 (Sonoma)
+- Tested on macOS 10.15 (Catalina)
 - Works on Mac hardware (Intel and Apple Silicon) and AWS EC2 Mac instances
 - Database forensics requires database client tools (mysql, psql, mongo, redis-cli, etc.)
 - Some database queries require authentication - the script will note when queries fail
