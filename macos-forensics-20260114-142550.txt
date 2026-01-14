@@ -1,0 +1,52 @@
+
+
+================================================================================
+  SYSTEM INFORMATION
+================================================================================
+
+Hostname: 603e5f63d01a
+macOS Version: 15.7.3
+Build: 24G419
+Kernel: 24.6.0
+Architecture: arm64
+Uptime: 9 days
+CPU: Apple M3 Max
+CPU Cores: 14
+Total Memory: 36 GB
+Instance ID: Not EC2
+
+================================================================================
+  DISK FORENSICS
+================================================================================
+
+Disk Usage:
+Filesystem        Size    Used   Avail Capacity iused ifree %iused  Mounted on
+/dev/disk3s3s1   926Gi    10Gi   556Gi     2%    427k  4.3G    0%   /
+devfs            208Ki   208Ki     0Bi   100%     718     0  100%   /dev
+/dev/disk3s6     926Gi   2.0Gi   556Gi     1%       2  5.8G    0%   /System/Volumes/VM
+/dev/disk3s4     926Gi   6.9Gi   556Gi     2%    1.3k  5.8G    0%   /System/Volumes/Preboot
+/dev/disk3s2     926Gi    53Mi   556Gi     1%      62  5.8G    0%   /System/Volumes/Update
+/dev/disk1s2     500Mi   6.0Mi   480Mi     2%       1  4.9M    0%   /System/Volumes/xarts
+/dev/disk1s1     500Mi   5.6Mi   480Mi     2%      37  4.9M    0%   /System/Volumes/iSCPreboot
+/dev/disk1s3     500Mi   3.3Mi   480Mi     1%      88  4.9M    0%   /System/Volumes/Hardware
+/dev/disk3s1     926Gi   349Gi   556Gi    39%    1.7M  5.8G    0%   /System/Volumes/Data
+map auto_home      0Bi     0Bi     0Bi   100%       0     0     -   /System/Volumes/Data/home
+map -fstab         0Bi     0Bi     0Bi   100%       0     0     -   /System/Volumes/Data/Network/Servers
+/dev/disk7s2     932Gi   709Gi   223Gi    77%    1.1M  2.3G    0%   /Volumes/Transcend
+/dev/disk5       463Mi   463Mi     0Bi   100%       0     0     -   /Volumes/SANMIGUEL_ADRIAN 1
+
+Disk I/O Statistics:
+              disk0               disk5               disk6 
+    KB/t  tps  MB/s     KB/t  tps  MB/s     KB/t  tps  MB/s 
+   17.83  816 14.22   274.30    0  0.00    41.13   62  2.51 
+   17.30  610 10.30     0.00    0  0.00     0.00    0  0.00 
+    9.81 1878 17.99     0.00    0  0.00     0.00    0  0.00 
+    5.77  232  1.31     0.00    0  0.00     0.00    0  0.00 
+   14.04  297  4.07     0.00    0  0.00     0.00    0  0.00 
+
+================================================================================
+  FORENSICS SUMMARY
+================================================================================
+
+
+

@@ -2,7 +2,8 @@
 
 ## Overview
 
-A comprehensive Bash-based diagnostic tool for macOS that automatically detects performance bottlenecks and can create AWS Support cases with detailed forensic data. Automatically installs Homebrew and required utilities when needed.
+A comprehensive Bash-based diagnostic tool for macOS that automatically detects performance bottlenecks and can create AWS Support cases with detailed forensic data. It is recommended that you run this on the server that is suspected of performance issues. In it's original version, this was created for AWS DMS migration troubleshooting, where you would run this on your SOURCE DATABASE SERVER. This has been made more flexible to allow for helping diagnose any Windows performance troubleshooting scenario -- and help you open an AWS Support case with the full details included in it.
+
 
 **Key Features:**
 - ✅ Comprehensive performance forensics (CPU, Memory, Disk, Network, Database)
