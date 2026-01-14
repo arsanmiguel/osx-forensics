@@ -153,6 +153,13 @@ sudo ./invoke-macos-forensics.sh -m memory
 sudo ./invoke-macos-forensics.sh -m standard -o /var/log
 ```
 
+**Options:**
+- `-m, --mode` - Diagnostic mode: quick, standard, deep, disk, cpu, memory
+- `-s, --support` - Create AWS Support case if issues found
+- `-v, --severity` - Support case severity: low, normal, high, urgent, critical
+- `-o, --output` - Output directory (default: current directory)
+- `-h, --help` - Show help message
+
 </details>
 
 <details>
