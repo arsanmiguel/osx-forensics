@@ -378,32 +378,187 @@ analyze_databases() {
     
     local db_found=false
     
-    # Check for MySQL/MariaDB
-    if pgrep -x mysqld >/dev/null 2>&1; then
-        echo "MySQL/MariaDB detected" | tee -a "$OUTPUT_FILE"
-        ps aux | grep -i mysql | grep -v grep | tee -a "$OUTPUT_FILE"
+    # MySQL/MariaDB Detection
+    if pgrep -x mysqld >/dev/null 2>&1 || pgrep -x mariadbd >/dev/null 2>&1; then
         db_found=true
+        echo "=== MySQL/MariaDB Detected ===" | tee -a "$OUTPUT_FILE"
+        
+        ps aux | grep -E "[m]ysqld|[m]ariadbd" | awk '{printf "  Process: PID %s, CPU: %s%%, MEM: %s%%\n", $2, $3, $4}' | tee -a "$OUTPUT_FILE"
+        
+        local mysql_conns=$(netstat -an | grep '\.3306' | grep ESTABLISHED | wc -l | tr -d ' ')
+        echo "  Active Connections: ${mysql_conns}" | tee -a "$OUTPUT_FILE"
+        
+        if (( mysql_conns > 500 )); then
+            BOTTLENECKS+=("Database: High MySQL connection count (${mysql_conns})")
+        fi
+        
+        if command -v mysql >/dev/null 2>&1; then
+            echo "" | tee -a "$OUTPUT_FILE"
+            echo "  MySQL Query Analysis:" | tee -a "$OUTPUT_FILE"
+            
+            mysql -u root -e "SELECT ID, USER, HOST, DB, COMMAND, TIME, STATE, LEFT(INFO, 100) AS QUERY FROM information_schema.PROCESSLIST WHERE COMMAND != 'Sleep' AND TIME > 30 ORDER BY TIME DESC LIMIT 5;" 2>/dev/null | tee -a "$OUTPUT_FILE" || echo "  Unable to query MySQL (requires authentication)" | tee -a "$OUTPUT_FILE"
+            
+            mysql -u root -e "SELECT DIGEST_TEXT AS query, COUNT_STAR AS exec_count, ROUND(AVG_TIMER_WAIT/1000000000, 2) AS avg_time_ms, ROUND(SUM_TIMER_WAIT/1000000000, 2) AS total_time_ms FROM performance_schema.events_statements_summary_by_digest ORDER BY SUM_TIMER_WAIT DESC LIMIT 5;" 2>/dev/null | tee -a "$OUTPUT_FILE"
+            
+            local long_running=$(mysql -u root -N -e "SELECT COUNT(*) FROM information_schema.PROCESSLIST WHERE COMMAND != 'Sleep' AND TIME > 30;" 2>/dev/null)
+            if [[ -n "$long_running" ]] && (( long_running > 0 )); then
+                BOTTLENECKS+=("Database: Long-running MySQL queries detected (>30s)")
+            fi
+        fi
+        echo "" | tee -a "$OUTPUT_FILE"
     fi
     
-    # Check for PostgreSQL
-    if pgrep -x postgres >/dev/null 2>&1; then
-        echo "PostgreSQL detected" | tee -a "$OUTPUT_FILE"
-        ps aux | grep -i postgres | grep -v grep | tee -a "$OUTPUT_FILE"
+    # PostgreSQL Detection
+    if pgrep -x postgres >/dev/null 2>&1 || pgrep -x postmaster >/dev/null 2>&1; then
         db_found=true
+        echo "=== PostgreSQL Detected ===" | tee -a "$OUTPUT_FILE"
+        
+        ps aux | grep -E "[p]ostgres|[p]ostmaster" | head -1 | awk '{printf "  Process: PID %s, CPU: %s%%, MEM: %s%%\n", $2, $3, $4}' | tee -a "$OUTPUT_FILE"
+        
+        local pg_conns=$(netstat -an | grep '\.5432' | grep ESTABLISHED | wc -l | tr -d ' ')
+        echo "  Active Connections: ${pg_conns}" | tee -a "$OUTPUT_FILE"
+        
+        if (( pg_conns > 500 )); then
+            BOTTLENECKS+=("Database: High PostgreSQL connection count (${pg_conns})")
+        fi
+        
+        if command -v psql >/dev/null 2>&1; then
+            echo "" | tee -a "$OUTPUT_FILE"
+            echo "  PostgreSQL Query Analysis:" | tee -a "$OUTPUT_FILE"
+            
+            psql -U postgres -c "SELECT pid, usename, application_name, state, EXTRACT(EPOCH FROM (now() - query_start)) AS duration_seconds, LEFT(query, 100) AS query FROM pg_stat_activity WHERE state != 'idle' AND query NOT LIKE '%pg_stat_activity%' ORDER BY duration_seconds DESC LIMIT 5;" 2>/dev/null | tee -a "$OUTPUT_FILE" || echo "  Unable to query PostgreSQL (requires authentication)" | tee -a "$OUTPUT_FILE"
+            
+            psql -U postgres -c "SELECT query, calls, ROUND(total_exec_time::numeric, 2) AS total_time_ms, ROUND(mean_exec_time::numeric, 2) AS avg_time_ms FROM pg_stat_statements ORDER BY total_exec_time DESC LIMIT 5;" 2>/dev/null | tee -a "$OUTPUT_FILE"
+            
+            local long_running=$(psql -U postgres -t -c "SELECT COUNT(*) FROM pg_stat_activity WHERE state != 'idle' AND EXTRACT(EPOCH FROM (now() - query_start)) > 30;" 2>/dev/null | tr -d ' ')
+            if [[ -n "$long_running" ]] && (( long_running > 0 )); then
+                BOTTLENECKS+=("Database: Long-running PostgreSQL queries detected (>30s)")
+            fi
+        fi
+        echo "" | tee -a "$OUTPUT_FILE"
     fi
     
-    # Check for MongoDB
+    # MongoDB Detection
     if pgrep -x mongod >/dev/null 2>&1; then
-        echo "MongoDB detected" | tee -a "$OUTPUT_FILE"
-        ps aux | grep -i mongod | grep -v grep | tee -a "$OUTPUT_FILE"
         db_found=true
+        echo "=== MongoDB Detected ===" | tee -a "$OUTPUT_FILE"
+        
+        ps aux | grep "[m]ongod" | awk '{printf "  Process: PID %s, CPU: %s%%, MEM: %s%%\n", $2, $3, $4}' | tee -a "$OUTPUT_FILE"
+        
+        local mongo_conns=$(netstat -an | grep '\.27017' | grep ESTABLISHED | wc -l | tr -d ' ')
+        echo "  Active Connections: ${mongo_conns}" | tee -a "$OUTPUT_FILE"
+        
+        if (( mongo_conns > 1000 )); then
+            BOTTLENECKS+=("Database: High MongoDB connection count (${mongo_conns})")
+        fi
+        
+        if command -v mongo >/dev/null 2>&1 || command -v mongosh >/dev/null 2>&1; then
+            echo "" | tee -a "$OUTPUT_FILE"
+            echo "  MongoDB Query Analysis:" | tee -a "$OUTPUT_FILE"
+            
+            local mongo_cmd="mongo"
+            command -v mongosh >/dev/null 2>&1 && mongo_cmd="mongosh"
+            
+            $mongo_cmd --quiet --eval "db.currentOp({\$or: [{op: {\$in: ['query', 'command']}}, {secs_running: {\$gte: 30}}]}).inprog.forEach(function(op) { print('OpID: ' + op.opid + ' | Duration: ' + op.secs_running + 's | NS: ' + op.ns); });" 2>/dev/null | tee -a "$OUTPUT_FILE" || echo "  Unable to query MongoDB (requires authentication)" | tee -a "$OUTPUT_FILE"
+            
+            local long_running=$($mongo_cmd --quiet --eval "db.currentOp({secs_running: {\$gte: 30}}).inprog.length" 2>/dev/null)
+            if [[ -n "$long_running" ]] && (( long_running > 0 )); then
+                BOTTLENECKS+=("Database: Long-running MongoDB operations detected (>30s)")
+            fi
+        fi
+        echo "" | tee -a "$OUTPUT_FILE"
     fi
     
-    # Check for Redis
+    # Redis Detection
     if pgrep -x redis-server >/dev/null 2>&1; then
-        echo "Redis detected" | tee -a "$OUTPUT_FILE"
-        ps aux | grep -i redis | grep -v grep | tee -a "$OUTPUT_FILE"
         db_found=true
+        echo "=== Redis Detected ===" | tee -a "$OUTPUT_FILE"
+        
+        ps aux | grep "[r]edis-server" | awk '{printf "  Process: PID %s, CPU: %s%%, MEM: %s%%\n", $2, $3, $4}' | tee -a "$OUTPUT_FILE"
+        
+        local redis_conns=$(netstat -an | grep '\.6379' | grep ESTABLISHED | wc -l | tr -d ' ')
+        echo "  Active Connections: ${redis_conns}" | tee -a "$OUTPUT_FILE"
+        
+        if (( redis_conns > 10000 )); then
+            BOTTLENECKS+=("Database: High Redis connection count (${redis_conns})")
+        fi
+        
+        if command -v redis-cli >/dev/null 2>&1; then
+            echo "" | tee -a "$OUTPUT_FILE"
+            echo "  Redis Performance Metrics:" | tee -a "$OUTPUT_FILE"
+            
+            local redis_stats=$(redis-cli INFO stats 2>/dev/null)
+            local total_commands=$(echo "$redis_stats" | grep "total_commands_processed:" | cut -d: -f2 | tr -d '\r')
+            local ops_per_sec=$(echo "$redis_stats" | grep "instantaneous_ops_per_sec:" | cut -d: -f2 | tr -d '\r')
+            local rejected_conns=$(echo "$redis_stats" | grep "rejected_connections:" | cut -d: -f2 | tr -d '\r')
+            
+            echo "  Total Commands: ${total_commands} | Ops/sec: ${ops_per_sec} | Rejected: ${rejected_conns}" | tee -a "$OUTPUT_FILE"
+            
+            echo "  Top 5 Slow Commands:" | tee -a "$OUTPUT_FILE"
+            redis-cli SLOWLOG GET 5 2>/dev/null | tee -a "$OUTPUT_FILE" || echo "  Unable to query Redis slowlog" | tee -a "$OUTPUT_FILE"
+            
+            if [[ -n "$rejected_conns" ]] && (( rejected_conns > 0 )); then
+                BOTTLENECKS+=("Database: Redis connection rejections detected (${rejected_conns})")
+            fi
+        fi
+        echo "" | tee -a "$OUTPUT_FILE"
+    fi
+    
+    # Cassandra Detection
+    if pgrep -f "org.apache.cassandra" >/dev/null 2>&1; then
+        db_found=true
+        echo "=== Cassandra Detected ===" | tee -a "$OUTPUT_FILE"
+        
+        ps aux | grep "[o]rg.apache.cassandra" | awk '{printf "  Process: PID %s, CPU: %s%%, MEM: %s%%\n", $2, $3, $4}' | tee -a "$OUTPUT_FILE"
+        
+        local cass_conns=$(netstat -an | grep '\.9042' | grep ESTABLISHED | wc -l | tr -d ' ')
+        echo "  Active Connections: ${cass_conns}" | tee -a "$OUTPUT_FILE"
+        
+        if (( cass_conns > 1000 )); then
+            BOTTLENECKS+=("Database: High Cassandra connection count (${cass_conns})")
+        fi
+        echo "" | tee -a "$OUTPUT_FILE"
+    fi
+    
+    # Oracle Detection
+    if pgrep -x oracle >/dev/null 2>&1 || pgrep -f "ora_pmon" >/dev/null 2>&1; then
+        db_found=true
+        echo "=== Oracle Database Detected ===" | tee -a "$OUTPUT_FILE"
+        
+        ps aux | grep "[o]ra_pmon" | awk '{printf "  Process: PID %s, CPU: %s%%, MEM: %s%%\n", $2, $3, $4}' | tee -a "$OUTPUT_FILE"
+        
+        local oracle_conns=$(netstat -an | grep '\.1521' | grep ESTABLISHED | wc -l | tr -d ' ')
+        echo "  Active Connections: ${oracle_conns}" | tee -a "$OUTPUT_FILE"
+        
+        if (( oracle_conns > 500 )); then
+            BOTTLENECKS+=("Database: High Oracle connection count (${oracle_conns})")
+        fi
+        
+        if command -v sqlplus >/dev/null 2>&1; then
+            echo "" | tee -a "$OUTPUT_FILE"
+            echo "  Oracle Query Analysis:" | tee -a "$OUTPUT_FILE"
+            
+            echo "SELECT sid, serial#, username, status, ROUND(last_call_et/60, 2) AS duration_min, sql_id FROM v\$session WHERE status = 'ACTIVE' AND username IS NOT NULL ORDER BY last_call_et DESC FETCH FIRST 5 ROWS ONLY;" | sqlplus -S / as sysdba 2>/dev/null | tee -a "$OUTPUT_FILE" || echo "  Unable to query Oracle (requires sqlplus and authentication)" | tee -a "$OUTPUT_FILE"
+        fi
+        echo "" | tee -a "$OUTPUT_FILE"
+    fi
+    
+    # Elasticsearch Detection
+    if pgrep -f "org.elasticsearch" >/dev/null 2>&1; then
+        db_found=true
+        echo "=== Elasticsearch Detected ===" | tee -a "$OUTPUT_FILE"
+        
+        ps aux | grep "[o]rg.elasticsearch" | awk '{printf "  Process: PID %s, CPU: %s%%, MEM: %s%%\n", $2, $3, $4}' | tee -a "$OUTPUT_FILE"
+        
+        local es_conns=$(netstat -an | grep '\.9200' | grep ESTABLISHED | wc -l | tr -d ' ')
+        echo "  Active Connections: ${es_conns}" | tee -a "$OUTPUT_FILE"
+        
+        if command -v curl >/dev/null 2>&1; then
+            echo "" | tee -a "$OUTPUT_FILE"
+            echo "  Elasticsearch Tasks:" | tee -a "$OUTPUT_FILE"
+            curl -s "http://localhost:9200/_tasks?detailed=true&actions=*search*" 2>/dev/null | grep -o '"running_time_in_nanos":[0-9]*' | head -5 | tee -a "$OUTPUT_FILE" || echo "  Unable to query Elasticsearch" | tee -a "$OUTPUT_FILE"
+        fi
+        echo "" | tee -a "$OUTPUT_FILE"
     fi
     
     if [[ "$db_found" == false ]]; then
