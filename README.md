@@ -12,7 +12,7 @@ A comprehensive Bash-based diagnostic tool for macOS that automatically detects 
 - ✅ CPU forensics (load average analysis, top consumers, process tracking)
 - ✅ Memory forensics (pressure detection, swap analysis, top consumers)
 - ✅ Disk I/O analysis (usage, performance metrics)
-- ✅ **Database forensics** - DBA-level query analysis capabilities
+- ✅ **Database forensics** - DBA-level query analysis + DMS readiness checks
 - ✅ Network analysis (connection states, interface statistics)
 - ✅ **Automatic AWS Support case creation** with diagnostic data
 - ✅ Works on macOS 10.15 (Catalina) and later
@@ -103,11 +103,16 @@ sudo ./invoke-macos-forensics.sh
 **Database Forensics:**
 - Automatic detection of running databases
 - **MySQL/MariaDB**: Connection count, long-running queries (>30s), top 5 queries by execution time, performance schema analysis
+  - **DMS Readiness**: Binary logging (log_bin=ON), binlog format (ROW), retention (expire_logs_days >= 1), replication lag
 - **PostgreSQL**: Connection count, long-running queries (>30s), top 5 queries from pg_stat_statements, active session analysis
+  - **DMS Readiness**: WAL level (logical), replication slots (max_replication_slots >= 1), replication lag
+- **Oracle**: Connection count, active sessions, top queries by elapsed time
+  - **DMS Readiness**: ARCHIVELOG mode, supplemental logging, Data Guard lag
+- **SQL Server**: Connection count, active sessions, top queries, blocking detection
+  - **DMS Readiness**: SQL Agent status, recovery model (FULL), AlwaysOn replica lag
 - **MongoDB**: Connection count, long-running operations (>30s), current operations analysis
 - **Redis**: Connection count, ops/sec metrics, connection rejections, slowlog analysis
 - **Cassandra**: Connection count, process resource usage
-- **Oracle**: Connection count, active sessions, top queries by elapsed time
 - **Elasticsearch**: Connection count, long-running search tasks
 - Automatic bottleneck detection for high connection counts
 - Automatic detection of long-running queries/operations
