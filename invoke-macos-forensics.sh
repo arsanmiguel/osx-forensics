@@ -140,6 +140,7 @@ check_required_utilities() {
         "diskutil:native"
         "netstat:native"
         "ps:native"
+        "iotop:iotop"
     )
     
     for util_pair in "${utilities[@]}"; do
@@ -321,13 +322,42 @@ analyze_disk() {
     
     # Disk I/O statistics
     echo "" | tee -a "$OUTPUT_FILE"
-    echo "Disk I/O Statistics:" | tee -a "$OUTPUT_FILE"
+    echo "Disk I/O Statistics (5 samples):" | tee -a "$OUTPUT_FILE"
     iostat -d -c 5 | tee -a "$OUTPUT_FILE"
+    
+    # I/O wait analysis using iotop if available
+    if command -v iotop >/dev/null 2>&1; then
+        echo "" | tee -a "$OUTPUT_FILE"
+        echo "Top I/O Consumers (iotop):" | tee -a "$OUTPUT_FILE"
+        sudo iotop -P -n 10 2>/dev/null | tee -a "$OUTPUT_FILE" || echo "  Unable to run iotop (requires sudo)" | tee -a "$OUTPUT_FILE"
+    else
+        echo "" | tee -a "$OUTPUT_FILE"
+        echo "iotop not available - install with: brew install iotop" | tee -a "$OUTPUT_FILE"
+    fi
+    
+    # Disk activity by process
+    echo "" | tee -a "$OUTPUT_FILE"
+    echo "Processes with High Disk Activity:" | tee -a "$OUTPUT_FILE"
+    ps aux | awk 'NR==1 || $8 ~ /D/' | head -20 | tee -a "$OUTPUT_FILE"
+    
+    # Check disk latency using diskutil
+    echo "" | tee -a "$OUTPUT_FILE"
+    echo "Disk Latency Analysis:" | tee -a "$OUTPUT_FILE"
+    for disk in $(diskutil list | grep "^/dev/disk" | awk '{print $1}' | head -3); do
+        echo "  ${disk}:" | tee -a "$OUTPUT_FILE"
+        diskutil info "$disk" | grep -E "Device Block Size|Total Size|Volume Free Space|SMART Status" | tee -a "$OUTPUT_FILE"
+    done
     
     # Check for high disk usage
     local disk_usage=$(df -h / | tail -1 | awk '{print $5}' | sed 's/%//')
     if (( disk_usage > 90 )); then
         BOTTLENECKS+=("Disk: High disk usage on root volume (${disk_usage}%)")
+    fi
+    
+    # Check for I/O wait by looking at processes in D state (uninterruptible sleep)
+    local io_wait_procs=$(ps aux | awk '$8 ~ /D/' | wc -l | tr -d ' ')
+    if (( io_wait_procs > 5 )); then
+        BOTTLENECKS+=("Disk: High I/O wait - ${io_wait_procs} processes in uninterruptible sleep")
     fi
     
     log_success "Disk forensics completed"
