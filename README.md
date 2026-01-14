@@ -322,6 +322,78 @@ sudo ./invoke-macos-forensics.sh -m standard
 ## 🎯 **Use Cases**
 
 <details>
+<summary><strong>AWS DMS Migrations</strong></summary>
+
+**This tool is designed to run on your SOURCE DATABASE SERVER**, not on the DMS replication instance (which is AWS-managed).
+
+**What it checks for DMS by database type:**
+
+<details>
+<summary><strong>MySQL/MariaDB</strong></summary>
+
+- ✅ Binary logging enabled (log_bin=ON, required for CDC)
+- ✅ Binlog format set to ROW (required for DMS)
+- ✅ Binary log retention configured (expire_logs_days >= 1)
+- ✅ Replication lag (if source is a replica)
+
+</details>
+
+<details>
+<summary><strong>PostgreSQL</strong></summary>
+
+- ✅ WAL level set to 'logical' (required for CDC)
+- ✅ Replication slots configured (max_replication_slots >= 1)
+- ✅ Replication lag (if standby server)
+
+</details>
+
+<details>
+<summary><strong>Oracle</strong></summary>
+
+- ✅ ARCHIVELOG mode enabled (required for CDC)
+- ✅ Supplemental logging enabled (required for DMS)
+- ✅ Data Guard apply lag (if standby)
+
+</details>
+
+<details>
+<summary><strong>SQL Server</strong></summary>
+
+- ✅ SQL Server Agent running (required for CDC)
+- ✅ Database recovery model set to FULL (required for CDC)
+- ✅ AlwaysOn replica lag (if applicable)
+
+</details>
+
+<details>
+<summary><strong>All Databases</strong></summary>
+
+- ✅ CloudWatch Logs Agent running
+- ✅ Database connection health
+- ✅ Network connectivity to database ports
+- ✅ Connection churn that could impact DMS
+- ✅ Source database performance issues
+- ✅ Long-running queries/sessions
+- ✅ High connection counts
+
+</details>
+
+**Run this when:**
+- Planning a DMS migration (pre-migration assessment)
+- DMS replication is slow or stalling
+- Source database performance issues
+- High replication lag
+- Connection errors in DMS logs
+- CDC not capturing changes
+
+**Usage:**
+```bash
+sudo ./invoke-macos-forensics.sh -m deep -s -v high
+```
+
+</details>
+
+<details>
 <summary><strong>Development Machine Performance</strong></summary>
 
 Diagnose slow build times, IDE performance, or Docker container issues:
