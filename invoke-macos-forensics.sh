@@ -620,7 +620,16 @@ create_support_case() {
     
     log_info "Creating AWS Support case..."
     
-    local subject="macOS Performance Issues Detected - $(hostname)"
+    # Get instance ID if on AWS, otherwise use hostname
+    local instance_id=$(curl -s -m 2 http://169.254.169.254/latest/meta-data/instance-id 2>/dev/null || echo "")
+    local system_identifier
+    if [[ -n "$instance_id" ]]; then
+        system_identifier="$instance_id"
+    else
+        system_identifier="$(hostname)"
+    fi
+    
+    local subject="macOS Performance Issues Detected - ${system_identifier}"
     local description="Automated performance forensics detected the following issues:\n\n"
     
     for bottleneck in "${BOTTLENECKS[@]}"; do
