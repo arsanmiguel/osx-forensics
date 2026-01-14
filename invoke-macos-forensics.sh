@@ -158,6 +158,16 @@ check_required_utilities() {
         fi
     done
     
+    # Check for AWS CLI if support case creation is requested
+    if [[ "$CREATE_SUPPORT_CASE" == true ]]; then
+        if ! command -v aws >/dev/null 2>&1; then
+            log_warning "AWS CLI not found, attempting to install..."
+            install_package "awscli" || true
+        else
+            log_success "AWS CLI is installed"
+        fi
+    fi
+    
     log_success "Utility check completed"
 }
 
@@ -418,7 +428,8 @@ create_support_case() {
     fi
     
     if ! command -v aws >/dev/null 2>&1; then
-        log_warning "AWS CLI not found, cannot create support case"
+        log_error "AWS CLI not available, cannot create support case"
+        log_error "Install manually: brew install awscli"
         return 1
     fi
     
