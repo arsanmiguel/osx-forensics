@@ -103,13 +103,42 @@ sudo ./invoke-macos-forensics.sh
 **Database Forensics:**
 - Automatic detection of running databases
 - **MySQL/MariaDB**: Connection count, long-running queries (>30s), top 5 queries by execution time, performance schema analysis
-  - **DMS Readiness**: Binary logging (log_bin=ON), binlog format (ROW), retention (expire_logs_days >= 1), replication lag
+  <details>
+  <summary><strong>DMS Readiness</strong></summary>
+  
+  - Binary logging (log_bin=ON)
+  - Binlog format (ROW)
+  - Retention (expire_logs_days >= 1)
+  - Replication lag
+  
+  </details>
 - **PostgreSQL**: Connection count, long-running queries (>30s), top 5 queries from pg_stat_statements, active session analysis
-  - **DMS Readiness**: WAL level (logical), replication slots (max_replication_slots >= 1), replication lag
+  <details>
+  <summary><strong>DMS Readiness</strong></summary>
+  
+  - WAL level (logical)
+  - Replication slots (max_replication_slots >= 1)
+  - Replication lag
+  
+  </details>
 - **Oracle**: Connection count, active sessions, top queries by elapsed time
-  - **DMS Readiness**: ARCHIVELOG mode, supplemental logging, Data Guard lag
+  <details>
+  <summary><strong>DMS Readiness</strong></summary>
+  
+  - ARCHIVELOG mode
+  - Supplemental logging
+  - Data Guard lag
+  
+  </details>
 - **SQL Server**: Connection count, active sessions, top queries, blocking detection
-  - **DMS Readiness**: SQL Agent status, recovery model (FULL), AlwaysOn replica lag
+  <details>
+  <summary><strong>DMS Readiness</strong></summary>
+  
+  - SQL Agent status
+  - Recovery model (FULL)
+  - AlwaysOn replica lag
+  
+  </details>
 - **MongoDB**: Connection count, long-running operations (>30s), current operations analysis
 - **Redis**: Connection count, ops/sec metrics, connection rejections, slowlog analysis
 - **Cassandra**: Connection count, process resource usage
