@@ -15,14 +15,14 @@ A comprehensive Bash-based diagnostic tool for macOS that automatically detects 
 - ✅ **Database forensics** - DBA-level query analysis + DMS readiness checks
 - ✅ Network analysis (connection states, interface statistics)
 - ✅ **Automatic AWS Support case creation** with diagnostic data
-- ✅ Works on macOS 10.15 (Catalina) and later
+- ✅ Works on macOS 10.15 (Catalina) through macOS 15 (Sequoia)
 
 ---
 
 ## 🚀 **Quick Start**
 
 ### **Prerequisites**
-- macOS 10.15 (Catalina) or later
+- macOS 10.15 (Catalina) through macOS 15 (Sequoia)
 - sudo privileges
 - Homebrew (optional, will be installed automatically if needed)
 - AWS CLI (optional, will be installed automatically for support case creation)
@@ -30,6 +30,11 @@ A comprehensive Bash-based diagnostic tool for macOS that automatically detects 
 ### **Supported macOS Versions**
 
 **Tested on:**
+- macOS 15 (Sequoia)
+- macOS 14 (Sonoma)
+- macOS 13 (Ventura)
+- macOS 12 (Monterey)
+- macOS 11 (Big Sur)
 - macOS 10.15 (Catalina)
 
 **Note:** The script automatically installs Homebrew if not present and uses it to install any missing utilities.
@@ -778,7 +783,7 @@ For AWS-specific issues on EC2 Mac instances, the tool can automatically create 
 ## ⚠️ **Important Notes**
 
 - This utility requires sudo privileges for full diagnostics
-- Tested on macOS 10.15 (Catalina)
+- Tested on macOS 10.15 (Catalina) through macOS 15 (Sequoia)
 - Works on Mac hardware (Intel and Apple Silicon) and AWS EC2 Mac instances
 - Database forensics requires database client tools (mysql, psql, mongo, redis-cli, etc.)
 - Some database queries require authentication - the script will note when queries fail
