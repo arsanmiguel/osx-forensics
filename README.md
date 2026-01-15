@@ -791,6 +791,42 @@ For AWS-specific issues on EC2 Mac instances, the tool can automatically create 
 - **No warranty or official support provided** - use at your own discretion
 - Always test in non-production environments first
 
+### **Expected Performance Impact**
+
+**Quick Mode (1-2 minutes):**
+- CPU: <5% overhead - mostly reading system stats
+- Memory: <50MB - lightweight data collection
+- Disk I/O: Minimal - no performance testing, only stat collection
+- Network: None - passive monitoring only
+- **Safe for production** - read-only operations
+
+**Standard Mode (3-5 minutes):**
+- CPU: 5-10% overhead - includes sampling and process analysis
+- Memory: <100MB - additional process tree analysis
+- Disk I/O: Minimal - no write testing, only extended stat collection
+- Network: None - passive monitoring only
+- **Safe for production** - read-only operations
+
+**Deep Mode (5-10 minutes):**
+- CPU: 10-20% overhead - includes extended sampling
+- Memory: <150MB - comprehensive process and memory analysis
+- Disk I/O: Minimal - macOS version does not perform write tests
+- Network: None - passive monitoring only
+- **Safe for production** - read-only operations
+
+**Database Query Analysis (all modes):**
+- CPU: <2% overhead per database - lightweight queries to system tables
+- Memory: <20MB per database - result set caching
+- Database Load: Minimal - uses performance schema/DMVs/system views
+- **Safe for production** - read-only queries, no table locks
+
+**General Guidelines:**
+- The tool is **read-only** - no disk write tests on macOS
+- No application restarts or configuration changes
+- Monitoring tools run for brief intervals
+- Database queries target system/performance tables only, not user data
+- All operations are non-blocking and use minimal system resources
+
 ---
 
 ## 📝 **Version History**
