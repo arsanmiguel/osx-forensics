@@ -793,21 +793,21 @@ For AWS-specific issues on EC2 Mac instances, the tool can automatically create 
 
 ### **Expected Performance Impact**
 
-**Quick Mode (1-2 minutes):**
+**Quick Mode (3 minutes):**
 - CPU: <5% overhead - mostly reading system stats
 - Memory: <50MB - lightweight data collection
 - Disk I/O: Minimal - no performance testing, only stat collection
 - Network: None - passive monitoring only
 - **Safe for production** - read-only operations
 
-**Standard Mode (3-5 minutes):**
+**Standard Mode (5-10 minutes):**
 - CPU: 5-10% overhead - includes sampling and process analysis
 - Memory: <100MB - additional process tree analysis
 - Disk I/O: Minimal - no write testing, only extended stat collection
 - Network: None - passive monitoring only
 - **Safe for production** - read-only operations
 
-**Deep Mode (5-10 minutes):**
+**Deep Mode (15-20 minutes):**
 - CPU: 10-20% overhead - includes extended sampling
 - Memory: <150MB - comprehensive process and memory analysis
 - Disk I/O: Minimal - macOS version does not perform write tests
