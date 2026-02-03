@@ -434,6 +434,196 @@ analyze_storage_profile() {
     fi
     
     # ==========================================================================
+    # PARTITION ALIGNMENT ANALYSIS
+    # ==========================================================================
+    echo "" | tee -a "$OUTPUT_FILE"
+    echo "--- PARTITION ALIGNMENT ANALYSIS ---" | tee -a "$OUTPUT_FILE"
+    echo "Checking for 4K alignment (critical for SSD/SAN performance)..." | tee -a "$OUTPUT_FILE"
+    
+    local aligned_count=0
+    local misaligned_count=0
+    
+    # Iterate through physical disks (not synthesized APFS containers)
+    for disk in $(diskutil list | grep "^/dev/disk" | grep -v synthesized | awk '{print $1}'); do
+        local disk_info=$(diskutil info "$disk" 2>/dev/null)
+        
+        # Determine storage type
+        local storage_type="HDD"
+        local solid_state=$(echo "$disk_info" | grep "Solid State:" | cut -d: -f2 | xargs)
+        local media_name=$(echo "$disk_info" | grep "Media Name:" | cut -d: -f2 | xargs)
+        local protocol=$(echo "$disk_info" | grep "Protocol:" | cut -d: -f2 | xargs)
+        
+        if [[ "$solid_state" == "Yes" ]]; then
+            storage_type="SSD"
+        fi
+        
+        # Check for NVMe
+        if [[ "$protocol" == *"NVMe"* ]] || [[ "$media_name" == *"NVMe"* ]]; then
+            storage_type="NVMe"
+        fi
+        
+        # Check for external/USB (often SSD these days)
+        if [[ "$protocol" == *"USB"* ]]; then
+            storage_type="USB"
+        fi
+        
+        # Check for Thunderbolt (often external SSD or SAN)
+        if [[ "$protocol" == *"Thunderbolt"* ]]; then
+            storage_type="Thunderbolt"
+        fi
+        
+        # Check for Fibre Channel (SAN)
+        if [[ "$protocol" == *"Fibre"* ]] || [[ "$protocol" == *"FC"* ]]; then
+            storage_type="SAN"
+        fi
+        
+        # Get block size
+        local block_size=$(echo "$disk_info" | grep "Device Block Size:" | grep -oE '[0-9]+' | head -1)
+        [[ -z "$block_size" ]] && block_size=512
+        
+        # Get partition map entries using diskutil list
+        local disk_num=$(echo "$disk" | grep -oE 'disk[0-9]+')
+        
+        # Parse diskutil list for partition offsets
+        # macOS diskutil doesn't directly expose partition offsets, so we use 'gpt show' or 'fdisk'
+        if command -v gpt >/dev/null 2>&1; then
+            # Use gpt tool for GPT disks (requires root)
+            local gpt_output=$(gpt show "$disk" 2>/dev/null)
+            if [[ -n "$gpt_output" ]]; then
+                echo "" | tee -a "$OUTPUT_FILE"
+                echo "  $disk [$storage_type] - Block Size: ${block_size} bytes:" | tee -a "$OUTPUT_FILE"
+                
+                # Parse gpt show output: start_sector size type
+                while read -r start_sector size ptype rest; do
+                    [[ -z "$start_sector" ]] && continue
+                    [[ "$start_sector" == "start" ]] && continue
+                    [[ ! "$start_sector" =~ ^[0-9]+$ ]] && continue
+                    
+                    # Calculate offset in bytes
+                    local offset_bytes=$((start_sector * block_size))
+                    local offset_kb=$((offset_bytes / 1024))
+                    
+                    # Check 4K alignment
+                    local aligned_4k="NO"
+                    if (( offset_bytes % 4096 == 0 )); then
+                        aligned_4k="YES"
+                    fi
+                    
+                    # Check 1MB alignment
+                    local aligned_1mb="NO"
+                    if (( offset_bytes % 1048576 == 0 )); then
+                        aligned_1mb="YES"
+                    fi
+                    
+                    # Skip free space entries
+                    [[ "$ptype" == "-" ]] && continue
+                    
+                    if [[ "$aligned_4k" == "YES" ]]; then
+                        ((aligned_count++))
+                        local align_status="ALIGNED"
+                        if [[ "$aligned_1mb" == "YES" ]]; then
+                            align_status="ALIGNED (1MB - optimal)"
+                        fi
+                        echo "    Sector $start_sector: $align_status - Offset: ${offset_kb}KB - Type: $ptype" | tee -a "$OUTPUT_FILE"
+                    else
+                        ((misaligned_count++))
+                        echo "    Sector $start_sector: MISALIGNED - Offset: ${offset_kb}KB - Type: $ptype" | tee -a "$OUTPUT_FILE"
+                        
+                        # Determine severity
+                        local severity="Medium"
+                        if [[ "$storage_type" == "SSD" ]] || [[ "$storage_type" == "NVMe" ]] || [[ "$storage_type" == "SAN" ]]; then
+                            severity="High"
+                        fi
+                        
+                        BOTTLENECKS+=("Storage: Misaligned partition on $disk sector $start_sector [$storage_type] - ${offset_kb}KB offset")
+                    fi
+                done <<< "$gpt_output"
+            fi
+        fi
+        
+        # Fallback: use diskutil info on each partition slice
+        for slice in $(diskutil list "$disk" 2>/dev/null | grep -E "^\s+[0-9]+:" | awk '{print $NF}'); do
+            local slice_dev="/dev/$slice"
+            [[ -e "$slice_dev" ]] || continue
+            
+            local slice_info=$(diskutil info "$slice_dev" 2>/dev/null)
+            local part_offset=$(echo "$slice_info" | grep "Partition Offset:" | grep -oE '[0-9]+' | head -1)
+            
+            if [[ -n "$part_offset" ]] && [[ "$part_offset" -gt 0 ]]; then
+                local offset_kb=$((part_offset / 1024))
+                
+                # Check 4K alignment
+                local aligned_4k="NO"
+                if (( part_offset % 4096 == 0 )); then
+                    aligned_4k="YES"
+                fi
+                
+                # Check 1MB alignment
+                local aligned_1mb="NO"
+                if (( part_offset % 1048576 == 0 )); then
+                    aligned_1mb="YES"
+                fi
+                
+                local vol_name=$(echo "$slice_info" | grep "Volume Name:" | cut -d: -f2 | xargs)
+                [[ -z "$vol_name" ]] && vol_name="Unnamed"
+                
+                if [[ "$aligned_4k" == "YES" ]]; then
+                    ((aligned_count++))
+                    local align_status="ALIGNED"
+                    if [[ "$aligned_1mb" == "YES" ]]; then
+                        align_status="ALIGNED (1MB - optimal)"
+                    fi
+                    echo "  $slice_dev ($vol_name): $align_status - Offset: ${offset_kb}KB [$storage_type]" | tee -a "$OUTPUT_FILE"
+                else
+                    ((misaligned_count++))
+                    echo "  $slice_dev ($vol_name): MISALIGNED - Offset: ${offset_kb}KB [$storage_type]" | tee -a "$OUTPUT_FILE"
+                    
+                    local severity="Medium"
+                    local perf_impact="10-20% performance loss"
+                    if [[ "$storage_type" == "SSD" ]] || [[ "$storage_type" == "NVMe" ]]; then
+                        severity="High"
+                        perf_impact="30-50% performance loss"
+                    elif [[ "$storage_type" == "SAN" ]] || [[ "$storage_type" == "Thunderbolt" ]]; then
+                        severity="High"
+                        perf_impact="30-50% performance loss"
+                    fi
+                    
+                    BOTTLENECKS+=("Storage: Misaligned partition $slice_dev ($vol_name) [$storage_type] - Offset ${offset_kb}KB not 4K aligned")
+                fi
+            fi
+        done
+    done
+    
+    echo "" | tee -a "$OUTPUT_FILE"
+    echo "Partition Alignment Summary:" | tee -a "$OUTPUT_FILE"
+    echo "  Aligned partitions: $aligned_count" | tee -a "$OUTPUT_FILE"
+    if (( misaligned_count > 0 )); then
+        echo "  Misaligned partitions: $misaligned_count (PERFORMANCE IMPACT)" | tee -a "$OUTPUT_FILE"
+        echo "" | tee -a "$OUTPUT_FILE"
+        echo "  Misalignment Impact:" | tee -a "$OUTPUT_FILE"
+        echo "    - Internal SSD/NVMe: 30-50% performance degradation" | tee -a "$OUTPUT_FILE"
+        echo "    - External SSD (USB/Thunderbolt): 30-50% degradation" | tee -a "$OUTPUT_FILE"
+        echo "    - SAN (Fibre Channel): 30-50% degradation + backend I/O amplification" | tee -a "$OUTPUT_FILE"
+        echo "    - HDD: 10-20% degradation (extra read-modify-write cycles)" | tee -a "$OUTPUT_FILE"
+        echo "" | tee -a "$OUTPUT_FILE"
+        echo "  Remediation:" | tee -a "$OUTPUT_FILE"
+        echo "    - Backup data and reformat with Disk Utility (auto-aligns on modern macOS)" | tee -a "$OUTPUT_FILE"
+        echo "    - Use 'diskutil partitionDisk' which aligns by default" | tee -a "$OUTPUT_FILE"
+        echo "    - Common cause: drives formatted on older macOS or other OS" | tee -a "$OUTPUT_FILE"
+    else
+        if (( aligned_count > 0 )); then
+            echo "  All partitions are properly aligned" | tee -a "$OUTPUT_FILE"
+        else
+            echo "  No partition offset data available (APFS containers manage alignment internally)" | tee -a "$OUTPUT_FILE"
+        fi
+    fi
+    
+    # Note about APFS
+    echo "" | tee -a "$OUTPUT_FILE"
+    echo "  Note: APFS containers manage block allocation internally and are always optimally aligned." | tee -a "$OUTPUT_FILE"
+    echo "        Alignment issues typically only affect HFS+, FAT32, or exFAT volumes." | tee -a "$OUTPUT_FILE"
+    
+    # ==========================================================================
     # BOOT CONFIGURATION
     # ==========================================================================
     echo "" | tee -a "$OUTPUT_FILE"

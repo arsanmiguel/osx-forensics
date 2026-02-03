@@ -100,6 +100,7 @@ sudo ./invoke-macos-forensics.sh
 
 **Storage Profiling:**
 - **Partition scheme analysis** (GPT vs MBR with >2TB warnings, APM detection)
+- **Partition alignment analysis** (4K/1MB alignment check for SSD/SAN performance)
 - **Boot configuration detection:**
   - Apple Silicon: Apple Boot ROM (iBoot), always Secure Boot
   - Intel: UEFI, T2 Secure Boot status (Full/Medium/No Security)
@@ -537,6 +538,7 @@ BOTTLENECK: Disk: High disk usage on root volume (92%)
 <details>
 <summary><strong>Storage Issues</strong></summary>
 
+- **Misaligned partitions** (4K alignment check - 30-50% perf loss on SSD/SAN)
 - **MBR partition scheme on >2TB disk** (data loss risk - only 2TB accessible)
 - **SMART drive failures** or warnings (failing/about to fail)
 - **High disk usage** (>90% on root volume)
@@ -825,6 +827,20 @@ The script uses native macOS tools for storage analysis:
 - **GPT** (GUID Partition Table) - Modern, required for macOS 10.11+
 - **MBR** (Master Boot Record) - Legacy, 2TB limit (warns if >2TB disk)
 - **APM** (Apple Partition Map) - Legacy PowerPC format
+
+**Partition Alignment Analysis:**
+- Uses `diskutil info` to get partition offsets
+- Uses `gpt show` for detailed GPT partition analysis (when available)
+- Checks 4K (4096 byte) alignment - minimum for modern storage
+- Checks 1MB (1048576 byte) alignment - optimal for SSD/SAN
+- Detects storage type from diskutil (SSD, NVMe, USB, Thunderbolt, Fibre Channel)
+- Severity based on storage type:
+  - **Internal SSD/NVMe**: High severity (30-50% performance loss)
+  - **External SSD (USB/Thunderbolt)**: High severity (30-50% loss)
+  - **SAN (Fibre Channel)**: High severity (30-50% loss + I/O amplification)
+  - **HDD**: Medium severity (10-20% loss from read-modify-write)
+- Note: APFS containers manage alignment internally and are always optimal
+- Alignment issues typically affect HFS+, FAT32, exFAT volumes
 
 **Filesystem Detection:**
 - **APFS** - Modern Apple filesystem with encryption, snapshots, space sharing
