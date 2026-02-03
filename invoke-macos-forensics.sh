@@ -364,6 +364,463 @@ analyze_disk() {
 }
 
 #############################################################################
+# Storage Profiling
+#############################################################################
+
+analyze_storage_profile() {
+    log_info "Performing comprehensive storage analysis..."
+    
+    echo "" | tee -a "$OUTPUT_FILE"
+    echo "================================================================================" | tee -a "$OUTPUT_FILE"
+    echo "  STORAGE PROFILING" | tee -a "$OUTPUT_FILE"
+    echo "================================================================================" | tee -a "$OUTPUT_FILE"
+    echo "" | tee -a "$OUTPUT_FILE"
+    
+    # ==========================================================================
+    # PARTITION SCHEME ANALYSIS (GPT vs MBR)
+    # ==========================================================================
+    echo "--- PARTITION SCHEME ANALYSIS ---" | tee -a "$OUTPUT_FILE"
+    
+    echo "" | tee -a "$OUTPUT_FILE"
+    echo "Disk Partition Schemes:" | tee -a "$OUTPUT_FILE"
+    
+    local gpt_count=0
+    local mbr_count=0
+    local apfs_container_count=0
+    
+    for disk in $(diskutil list | grep "^/dev/disk" | grep -v synthesized | awk '{print $1}'); do
+        local disk_info=$(diskutil info "$disk" 2>/dev/null)
+        local partition_type=$(echo "$disk_info" | grep "Content (IOContent):" | cut -d: -f2 | xargs)
+        local disk_size=$(echo "$disk_info" | grep "Disk Size:" | cut -d: -f2 | cut -d'(' -f1 | xargs)
+        local disk_size_bytes=$(echo "$disk_info" | grep "Disk Size:" | grep -oE '\([0-9]+ Bytes\)' | grep -oE '[0-9]+')
+        
+        local scheme=""
+        case "$partition_type" in
+            GUID_partition_scheme|"GUID_partition_scheme")
+                scheme="GPT (GUID Partition Table)"
+                ((gpt_count++))
+                ;;
+            FDisk_partition_scheme|"FDisk_partition_scheme")
+                scheme="MBR (Master Boot Record)"
+                ((mbr_count++))
+                # Check if >2TB with MBR
+                if [[ -n "$disk_size_bytes" ]] && (( disk_size_bytes > 2199023255552 )); then
+                    BOTTLENECKS+=("Storage: MBR partition scheme on >2TB disk $disk (data loss risk - only 2TB accessible)")
+                fi
+                ;;
+            Apple_partition_scheme)
+                scheme="APM (Apple Partition Map - Legacy PowerPC)"
+                ;;
+            Apple_APFS)
+                scheme="APFS Container (synthesized)"
+                ((apfs_container_count++))
+                ;;
+            *)
+                scheme="$partition_type"
+                ;;
+        esac
+        
+        echo "  $disk: $scheme - $disk_size" | tee -a "$OUTPUT_FILE"
+    done
+    
+    echo "" | tee -a "$OUTPUT_FILE"
+    echo "Partition Scheme Summary:" | tee -a "$OUTPUT_FILE"
+    echo "  GPT Disks: $gpt_count (modern, UEFI, required for macOS 10.11+)" | tee -a "$OUTPUT_FILE"
+    if (( mbr_count > 0 )); then
+        echo "  MBR Disks: $mbr_count (legacy, 2TB limit - external drives only)" | tee -a "$OUTPUT_FILE"
+    fi
+    if (( apfs_container_count > 0 )); then
+        echo "  APFS Containers: $apfs_container_count (virtual container disks)" | tee -a "$OUTPUT_FILE"
+    fi
+    
+    # ==========================================================================
+    # BOOT CONFIGURATION
+    # ==========================================================================
+    echo "" | tee -a "$OUTPUT_FILE"
+    echo "--- BOOT CONFIGURATION ---" | tee -a "$OUTPUT_FILE"
+    
+    # All Intel Macs use UEFI, Apple Silicon uses custom boot ROM
+    local cpu_brand=$(sysctl -n machdep.cpu.brand_string 2>/dev/null || echo "")
+    local arch=$(uname -m)
+    
+    echo "" | tee -a "$OUTPUT_FILE"
+    if [[ "$arch" == "arm64" ]]; then
+        echo "  Architecture: Apple Silicon (arm64)" | tee -a "$OUTPUT_FILE"
+        echo "  Firmware: Apple Boot ROM (iBoot)" | tee -a "$OUTPUT_FILE"
+        echo "  Secure Boot: Always enabled on Apple Silicon" | tee -a "$OUTPUT_FILE"
+    else
+        echo "  Architecture: Intel x86_64" | tee -a "$OUTPUT_FILE"
+        echo "  Firmware: UEFI (Intel Macs since 2006)" | tee -a "$OUTPUT_FILE"
+        
+        # Check Secure Boot status (T2 Macs)
+        local secure_boot=$(nvram 94b73556-2197-4702-82a8-3e1337dafbfb:AppleSecureBootPolicy 2>/dev/null | awk '{print $2}')
+        case "$secure_boot" in
+            "%02")
+                echo "  Secure Boot: Full Security (T2 chip)" | tee -a "$OUTPUT_FILE"
+                ;;
+            "%01")
+                echo "  Secure Boot: Medium Security (T2 chip)" | tee -a "$OUTPUT_FILE"
+                ;;
+            "%00")
+                echo "  Secure Boot: No Security (T2 chip disabled)" | tee -a "$OUTPUT_FILE"
+                ;;
+            *)
+                # Check if T2 chip exists
+                if system_profiler SPiBridgeDataType 2>/dev/null | grep -q "T2"; then
+                    echo "  Secure Boot: T2 chip present (status unknown)" | tee -a "$OUTPUT_FILE"
+                else
+                    echo "  Secure Boot: Not available (no T2 chip)" | tee -a "$OUTPUT_FILE"
+                fi
+                ;;
+        esac
+    fi
+    
+    # Boot volume info
+    echo "" | tee -a "$OUTPUT_FILE"
+    echo "Boot Volume:" | tee -a "$OUTPUT_FILE"
+    local boot_vol=$(bless --info --getBoot 2>/dev/null)
+    [[ -n "$boot_vol" ]] && echo "  $boot_vol" | tee -a "$OUTPUT_FILE"
+    
+    # Startup disk
+    local startup_disk=$(system_profiler SPSoftwareDataType 2>/dev/null | grep "Boot Volume:" | cut -d: -f2 | xargs)
+    [[ -n "$startup_disk" ]] && echo "  Startup Disk: $startup_disk" | tee -a "$OUTPUT_FILE"
+    
+    # Boot mode
+    local boot_mode=$(system_profiler SPSoftwareDataType 2>/dev/null | grep "Boot Mode:" | cut -d: -f2 | xargs)
+    [[ -n "$boot_mode" ]] && echo "  Boot Mode: $boot_mode" | tee -a "$OUTPUT_FILE"
+    
+    # ==========================================================================
+    # FILESYSTEM TYPES
+    # ==========================================================================
+    echo "" | tee -a "$OUTPUT_FILE"
+    echo "--- FILESYSTEM TYPES ---" | tee -a "$OUTPUT_FILE"
+    
+    local apfs_count=0
+    local hfs_count=0
+    local exfat_count=0
+    local msdos_count=0
+    local ntfs_count=0
+    local other_fs_count=0
+    
+    echo "" | tee -a "$OUTPUT_FILE"
+    echo "Mounted Volumes by Filesystem:" | tee -a "$OUTPUT_FILE"
+    
+    # Parse mount output for filesystem types
+    while IFS= read -r line; do
+        local fs_type=$(echo "$line" | grep -oE '\([^)]+\)' | head -1 | tr -d '()')
+        local mount_point=$(echo "$line" | awk '{print $3}')
+        local device=$(echo "$line" | awk '{print $1}')
+        
+        case "$fs_type" in
+            apfs)
+                ((apfs_count++))
+                ;;
+            hfs)
+                ((hfs_count++))
+                ;;
+            exfat)
+                ((exfat_count++))
+                ;;
+            msdos)
+                ((msdos_count++))
+                ;;
+            ntfs)
+                ((ntfs_count++))
+                ;;
+            *)
+                [[ -n "$fs_type" ]] && ((other_fs_count++))
+                ;;
+        esac
+    done < <(mount 2>/dev/null | grep "^/dev")
+    
+    echo "  APFS: $apfs_count volume(s) - Modern Apple filesystem (encryption, snapshots, space sharing)" | tee -a "$OUTPUT_FILE"
+    if (( hfs_count > 0 )); then
+        echo "  HFS+: $hfs_count volume(s) - Legacy Mac filesystem (consider migration to APFS)" | tee -a "$OUTPUT_FILE"
+    fi
+    if (( exfat_count > 0 )); then
+        echo "  exFAT: $exfat_count volume(s) - Cross-platform (external drives)" | tee -a "$OUTPUT_FILE"
+    fi
+    if (( msdos_count > 0 )); then
+        echo "  FAT32: $msdos_count volume(s) - Legacy cross-platform" | tee -a "$OUTPUT_FILE"
+    fi
+    if (( ntfs_count > 0 )); then
+        echo "  NTFS: $ntfs_count volume(s) - Windows filesystem (read-only by default)" | tee -a "$OUTPUT_FILE"
+    fi
+    
+    # APFS feature detection
+    echo "" | tee -a "$OUTPUT_FILE"
+    echo "APFS Features Detected:" | tee -a "$OUTPUT_FILE"
+    
+    # Check for FileVault (encryption)
+    local fv_status=$(fdesetup status 2>/dev/null)
+    echo "  FileVault: $fv_status" | tee -a "$OUTPUT_FILE"
+    
+    # Check for APFS snapshots
+    local snapshot_count=$(tmutil listlocalsnapshots / 2>/dev/null | grep -c "com.apple" || echo "0")
+    echo "  Local Snapshots: $snapshot_count Time Machine snapshot(s)" | tee -a "$OUTPUT_FILE"
+    
+    # Check for APFS space sharing (containers with multiple volumes)
+    local shared_containers=$(diskutil apfs list 2>/dev/null | grep -c "APFS Volume Disk" || echo "0")
+    if (( shared_containers > 1 )); then
+        echo "  Space Sharing: Active ($shared_containers volumes sharing container space)" | tee -a "$OUTPUT_FILE"
+    fi
+    
+    # ==========================================================================
+    # STORAGE TOPOLOGY
+    # ==========================================================================
+    echo "" | tee -a "$OUTPUT_FILE"
+    echo "--- STORAGE TOPOLOGY ---" | tee -a "$OUTPUT_FILE"
+    
+    # Disk list with detailed info
+    echo "" | tee -a "$OUTPUT_FILE"
+    echo "Physical Disks:" | tee -a "$OUTPUT_FILE"
+    diskutil list | tee -a "$OUTPUT_FILE"
+    
+    # APFS Container info
+    echo "" | tee -a "$OUTPUT_FILE"
+    echo "APFS Containers:" | tee -a "$OUTPUT_FILE"
+    diskutil apfs list 2>/dev/null | tee -a "$OUTPUT_FILE" || echo "  No APFS containers found" | tee -a "$OUTPUT_FILE"
+    
+    # CoreStorage info (for older macOS with Fusion drives)
+    echo "" | tee -a "$OUTPUT_FILE"
+    echo "CoreStorage Logical Volume Groups:" | tee -a "$OUTPUT_FILE"
+    diskutil cs list 2>/dev/null | tee -a "$OUTPUT_FILE" || echo "  No CoreStorage volumes found" | tee -a "$OUTPUT_FILE"
+    
+    # RAID information
+    echo "" | tee -a "$OUTPUT_FILE"
+    echo "Software RAID:" | tee -a "$OUTPUT_FILE"
+    diskutil appleRAID list 2>/dev/null | tee -a "$OUTPUT_FILE" || echo "  No Apple RAID sets found" | tee -a "$OUTPUT_FILE"
+    
+    # ==========================================================================
+    # STORAGE TIERING (SSD vs HDD vs Fusion)
+    # ==========================================================================
+    echo "" | tee -a "$OUTPUT_FILE"
+    echo "--- STORAGE TIERING ---" | tee -a "$OUTPUT_FILE"
+    
+    echo "" | tee -a "$OUTPUT_FILE"
+    echo "Drive Types:" | tee -a "$OUTPUT_FILE"
+    
+    local ssd_count=0
+    local hdd_count=0
+    local fusion_count=0
+    
+    # Get physical disk info
+    for disk in $(diskutil list | grep "^/dev/disk" | awk '{print $1}'); do
+        local disk_info=$(diskutil info "$disk" 2>/dev/null)
+        local media_name=$(echo "$disk_info" | grep "Media Name:" | cut -d: -f2 | xargs)
+        local solid_state=$(echo "$disk_info" | grep "Solid State:" | cut -d: -f2 | xargs)
+        local disk_size=$(echo "$disk_info" | grep "Disk Size:" | cut -d: -f2 | cut -d'(' -f1 | xargs)
+        local fusion=$(echo "$disk_info" | grep "Fusion Drive:" | cut -d: -f2 | xargs)
+        
+        if [[ "$fusion" == "Yes" ]]; then
+            echo "  $disk: Fusion Drive - $disk_size - $media_name" | tee -a "$OUTPUT_FILE"
+            ((fusion_count++))
+        elif [[ "$solid_state" == "Yes" ]]; then
+            echo "  $disk: SSD - $disk_size - $media_name" | tee -a "$OUTPUT_FILE"
+            ((ssd_count++))
+        elif [[ "$solid_state" == "No" ]]; then
+            echo "  $disk: HDD - $disk_size - $media_name" | tee -a "$OUTPUT_FILE"
+            ((hdd_count++))
+        fi
+    done
+    
+    echo "" | tee -a "$OUTPUT_FILE"
+    echo "Storage Tier Summary: SSD=$ssd_count, HDD=$hdd_count, Fusion=$fusion_count" | tee -a "$OUTPUT_FILE"
+    
+    # NVMe specific info
+    echo "" | tee -a "$OUTPUT_FILE"
+    echo "NVMe Controller Info:" | tee -a "$OUTPUT_FILE"
+    system_profiler SPNVMeDataType 2>/dev/null | grep -E "Model|Capacity|Link|TRIM" | tee -a "$OUTPUT_FILE" || echo "  No NVMe drives detected" | tee -a "$OUTPUT_FILE"
+    
+    # ==========================================================================
+    # CLOUD STORAGE DETECTION (AWS EC2 Mac)
+    # ==========================================================================
+    echo "" | tee -a "$OUTPUT_FILE"
+    echo "--- CLOUD STORAGE DETECTION ---" | tee -a "$OUTPUT_FILE"
+    
+    # Check if running on EC2 Mac
+    if curl -s -m 2 http://169.254.169.254/latest/meta-data/instance-id &>/dev/null; then
+        echo "" | tee -a "$OUTPUT_FILE"
+        echo "AWS EC2 Mac Instance Detected:" | tee -a "$OUTPUT_FILE"
+        
+        local instance_id=$(curl -s http://169.254.169.254/latest/meta-data/instance-id)
+        local instance_type=$(curl -s http://169.254.169.254/latest/meta-data/instance-type)
+        local region=$(curl -s http://169.254.169.254/latest/meta-data/placement/region 2>/dev/null || \
+                       curl -s http://169.254.169.254/latest/meta-data/placement/availability-zone | sed 's/[a-z]$//')
+        
+        echo "  Instance ID: $instance_id" | tee -a "$OUTPUT_FILE"
+        echo "  Instance Type: $instance_type" | tee -a "$OUTPUT_FILE"
+        echo "  Region: $region" | tee -a "$OUTPUT_FILE"
+        
+        # EC2 Mac uses EBS for root volume
+        if command -v aws >/dev/null 2>&1; then
+            echo "" | tee -a "$OUTPUT_FILE"
+            echo "  EBS Volumes:" | tee -a "$OUTPUT_FILE"
+            aws ec2 describe-volumes --filters "Name=attachment.instance-id,Values=$instance_id" \
+                --query 'Volumes[*].{ID:VolumeId,Type:VolumeType,Size:Size,IOPS:Iops}' \
+                --output table --region "$region" 2>/dev/null | tee -a "$OUTPUT_FILE" || \
+                echo "  Unable to query EBS volumes" | tee -a "$OUTPUT_FILE"
+        fi
+    else
+        echo "  Not running on AWS EC2" | tee -a "$OUTPUT_FILE"
+    fi
+    
+    # ==========================================================================
+    # SMART HEALTH STATUS
+    # ==========================================================================
+    echo "" | tee -a "$OUTPUT_FILE"
+    echo "--- SMART HEALTH STATUS ---" | tee -a "$OUTPUT_FILE"
+    
+    # Use diskutil for SMART status
+    for disk in $(diskutil list | grep "^/dev/disk" | grep -v synthesized | awk '{print $1}'); do
+        echo "" | tee -a "$OUTPUT_FILE"
+        echo "SMART Status for $disk:" | tee -a "$OUTPUT_FILE"
+        local smart_status=$(diskutil info "$disk" 2>/dev/null | grep "SMART Status:")
+        echo "  $smart_status" | tee -a "$OUTPUT_FILE"
+        
+        if echo "$smart_status" | grep -qi "failing\|about to fail"; then
+            BOTTLENECKS+=("Storage: SMART failure detected on $disk")
+        fi
+    done
+    
+    # Use smartctl if available (via Homebrew)
+    if command -v smartctl >/dev/null 2>&1; then
+        echo "" | tee -a "$OUTPUT_FILE"
+        echo "Detailed SMART Data (smartctl):" | tee -a "$OUTPUT_FILE"
+        for disk in /dev/disk0 /dev/disk1; do
+            [[ -e "$disk" ]] || continue
+            echo "" | tee -a "$OUTPUT_FILE"
+            echo "  $disk:" | tee -a "$OUTPUT_FILE"
+            smartctl -a "$disk" 2>/dev/null | grep -E "SMART overall|Percentage Used|Power On Hours|Wear_Leveling" | tee -a "$OUTPUT_FILE"
+        done
+    else
+        echo "" | tee -a "$OUTPUT_FILE"
+        echo "  Install smartmontools for detailed SMART data: brew install smartmontools" | tee -a "$OUTPUT_FILE"
+    fi
+    
+    # ==========================================================================
+    # CAPACITY PROFILING
+    # ==========================================================================
+    echo "" | tee -a "$OUTPUT_FILE"
+    echo "--- CAPACITY PROFILING ---" | tee -a "$OUTPUT_FILE"
+    
+    # Filesystem capacity
+    echo "" | tee -a "$OUTPUT_FILE"
+    echo "Filesystem Capacity:" | tee -a "$OUTPUT_FILE"
+    df -h | tee -a "$OUTPUT_FILE"
+    
+    # Storage overview from system_profiler
+    echo "" | tee -a "$OUTPUT_FILE"
+    echo "Storage Overview:" | tee -a "$OUTPUT_FILE"
+    system_profiler SPStorageDataType 2>/dev/null | grep -E "Mount Point:|Available:|Capacity:|File System:|Writable:" | tee -a "$OUTPUT_FILE"
+    
+    # Top space consumers
+    echo "" | tee -a "$OUTPUT_FILE"
+    echo "Top 10 Directories by Size (/):" | tee -a "$OUTPUT_FILE"
+    du -hx -d 1 / 2>/dev/null | sort -rh | head -11 | tee -a "$OUTPUT_FILE"
+    
+    # User directory breakdown
+    echo "" | tee -a "$OUTPUT_FILE"
+    echo "User Home Directory Breakdown:" | tee -a "$OUTPUT_FILE"
+    if [[ -d "$HOME" ]]; then
+        du -hx -d 1 "$HOME" 2>/dev/null | sort -rh | head -10 | tee -a "$OUTPUT_FILE"
+    fi
+    
+    # Large files
+    echo "" | tee -a "$OUTPUT_FILE"
+    echo "Large Files (>1GB):" | tee -a "$OUTPUT_FILE"
+    find / -xdev -type f -size +1G -exec ls -lh {} \; 2>/dev/null | sort -k5 -rh | head -10 | tee -a "$OUTPUT_FILE" || echo "  Unable to scan for large files" | tee -a "$OUTPUT_FILE"
+    
+    # Application sizes
+    echo "" | tee -a "$OUTPUT_FILE"
+    echo "Largest Applications:" | tee -a "$OUTPUT_FILE"
+    du -sh /Applications/* 2>/dev/null | sort -rh | head -10 | tee -a "$OUTPUT_FILE"
+    
+    # Caches and temporary files
+    echo "" | tee -a "$OUTPUT_FILE"
+    echo "Cache and Temporary Storage:" | tee -a "$OUTPUT_FILE"
+    echo "  System Caches: $(du -sh /Library/Caches 2>/dev/null | awk '{print $1}')" | tee -a "$OUTPUT_FILE"
+    echo "  User Caches: $(du -sh ~/Library/Caches 2>/dev/null | awk '{print $1}')" | tee -a "$OUTPUT_FILE"
+    echo "  Temporary Files: $(du -sh /tmp 2>/dev/null | awk '{print $1}')" | tee -a "$OUTPUT_FILE"
+    echo "  Xcode DerivedData: $(du -sh ~/Library/Developer/Xcode/DerivedData 2>/dev/null | awk '{print $1}')" | tee -a "$OUTPUT_FILE"
+    
+    # Time Machine snapshots
+    echo "" | tee -a "$OUTPUT_FILE"
+    echo "Time Machine Local Snapshots:" | tee -a "$OUTPUT_FILE"
+    tmutil listlocalsnapshots / 2>/dev/null | tee -a "$OUTPUT_FILE" || echo "  No local snapshots found" | tee -a "$OUTPUT_FILE"
+    
+    # ==========================================================================
+    # FILESYSTEM HEALTH
+    # ==========================================================================
+    echo "" | tee -a "$OUTPUT_FILE"
+    echo "--- FILESYSTEM HEALTH ---" | tee -a "$OUTPUT_FILE"
+    
+    # Volume verification status
+    echo "" | tee -a "$OUTPUT_FILE"
+    echo "Volume Verification:" | tee -a "$OUTPUT_FILE"
+    for vol in $(diskutil list | grep "Apple_APFS" | awk '{print $NF}'); do
+        echo "  Checking $vol..." | tee -a "$OUTPUT_FILE"
+        diskutil verifyVolume "$vol" 2>/dev/null | grep -E "appears to be OK|error|invalid" | tee -a "$OUTPUT_FILE"
+    done
+    
+    # ==========================================================================
+    # NETWORK STORAGE
+    # ==========================================================================
+    echo "" | tee -a "$OUTPUT_FILE"
+    echo "--- NETWORK STORAGE ---" | tee -a "$OUTPUT_FILE"
+    
+    # NFS mounts
+    echo "" | tee -a "$OUTPUT_FILE"
+    echo "NFS Mounts:" | tee -a "$OUTPUT_FILE"
+    mount | grep nfs | tee -a "$OUTPUT_FILE" || echo "  No NFS mounts" | tee -a "$OUTPUT_FILE"
+    
+    # SMB mounts
+    echo "" | tee -a "$OUTPUT_FILE"
+    echo "SMB/CIFS Mounts:" | tee -a "$OUTPUT_FILE"
+    mount | grep smbfs | tee -a "$OUTPUT_FILE" || echo "  No SMB mounts" | tee -a "$OUTPUT_FILE"
+    
+    # AFP mounts
+    echo "" | tee -a "$OUTPUT_FILE"
+    echo "AFP Mounts:" | tee -a "$OUTPUT_FILE"
+    mount | grep afpfs | tee -a "$OUTPUT_FILE" || echo "  No AFP mounts" | tee -a "$OUTPUT_FILE"
+    
+    # ==========================================================================
+    # STORAGE PERFORMANCE BASELINE
+    # ==========================================================================
+    echo "" | tee -a "$OUTPUT_FILE"
+    echo "--- STORAGE PERFORMANCE BASELINE ---" | tee -a "$OUTPUT_FILE"
+    
+    if [[ "$MODE" == "deep" ]] || [[ "$MODE" == "disk" ]]; then
+        log_info "Running storage performance baseline tests..."
+        
+        local test_dir="/tmp/storage_baseline_$$"
+        mkdir -p "$test_dir"
+        
+        # Sequential write test
+        echo "" | tee -a "$OUTPUT_FILE"
+        echo "Sequential Write Test (1GB):" | tee -a "$OUTPUT_FILE"
+        local write_result=$(dd if=/dev/zero of="$test_dir/test_file" bs=1m count=1024 2>&1)
+        local write_speed=$(echo "$write_result" | grep -oE '[0-9.]+ [MG]B/s' | tail -1)
+        echo "  Write Speed: ${write_speed:-N/A}" | tee -a "$OUTPUT_FILE"
+        
+        # Sequential read test
+        echo "" | tee -a "$OUTPUT_FILE"
+        echo "Sequential Read Test (1GB):" | tee -a "$OUTPUT_FILE"
+        purge 2>/dev/null || true  # Clear disk cache
+        local read_result=$(dd if="$test_dir/test_file" of=/dev/null bs=1m 2>&1)
+        local read_speed=$(echo "$read_result" | grep -oE '[0-9.]+ [MG]B/s' | tail -1)
+        echo "  Read Speed: ${read_speed:-N/A}" | tee -a "$OUTPUT_FILE"
+        
+        # Cleanup
+        rm -rf "$test_dir"
+    else
+        echo "  Run with -m deep or -m disk for performance baseline tests" | tee -a "$OUTPUT_FILE"
+    fi
+    
+    log_success "Storage profiling completed"
+}
+
+#############################################################################
 # Network Forensics
 #############################################################################
 
@@ -812,6 +1269,7 @@ main() {
             analyze_cpu
             analyze_memory
             analyze_disk
+            analyze_storage_profile
             analyze_network
             analyze_databases
             ;;
@@ -819,11 +1277,13 @@ main() {
             analyze_cpu
             analyze_memory
             analyze_disk
+            analyze_storage_profile
             analyze_network
             analyze_databases
             ;;
         disk)
             analyze_disk
+            analyze_storage_profile
             ;;
         cpu)
             analyze_cpu

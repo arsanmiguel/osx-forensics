@@ -7,6 +7,7 @@ A comprehensive Bash-based diagnostic tool for macOS that automatically detects 
 
 **Key Features:**
 - ✅ Comprehensive performance forensics (CPU, Memory, Disk, Network, Database)
+- ✅ **Storage profiling** (partition schemes, boot config, APFS/CoreStorage, SSD/HDD/Fusion, SMART health)
 - ✅ Automated bottleneck detection
 - ✅ **Automatic Homebrew installation** if not present
 - ✅ **Automatic AWS CLI installation** via Homebrew when needed
@@ -96,6 +97,28 @@ sudo ./invoke-macos-forensics.sh
 - Disk usage analysis
 - Disk I/O statistics via iostat
 - Automatic detection of high disk usage (>90%)
+
+**Storage Profiling:**
+- **Partition scheme analysis** (GPT vs MBR with >2TB warnings, APM detection)
+- **Boot configuration detection:**
+  - Apple Silicon: Apple Boot ROM (iBoot), always Secure Boot
+  - Intel: UEFI, T2 Secure Boot status (Full/Medium/No Security)
+  - Boot volume and startup disk identification
+- **Filesystem type detection:**
+  - APFS (modern, encryption, snapshots, space sharing)
+  - HFS+ (legacy - recommends migration to APFS)
+  - exFAT, FAT32, NTFS (external/cross-platform)
+- **APFS feature detection:** FileVault status, local snapshots, space sharing
+- Storage topology detection (APFS containers, CoreStorage, Apple RAID sets)
+- Storage tiering analysis (SSD vs HDD vs Fusion Drive vs NVMe)
+- AWS EC2 Mac EBS volume detection and optimization recommendations
+- SMART health status monitoring (drive health, wear indicators)
+- Capacity profiling (top directories by size, large file detection, application sizes)
+- Cache and temporary storage analysis (system caches, Xcode DerivedData)
+- Time Machine local snapshot analysis
+- Network storage detection (NFS, SMB/CIFS, AFP mounts)
+- Filesystem health verification (volume verification status)
+- Storage performance baseline testing (sequential read/write in deep mode)
 
 **Network Forensics:**
 - Network interface configuration
@@ -512,6 +535,26 @@ BOTTLENECK: Disk: High disk usage on root volume (92%)
 </details>
 
 <details>
+<summary><strong>Storage Issues</strong></summary>
+
+- **MBR partition scheme on >2TB disk** (data loss risk - only 2TB accessible)
+- **SMART drive failures** or warnings (failing/about to fail)
+- **High disk usage** (>90% on root volume)
+- **High I/O wait** - processes stuck in uninterruptible sleep (D state)
+- AWS EBS optimization opportunities (on EC2 Mac instances)
+- Time Machine snapshot accumulation
+
+**Example Detection:**
+```
+BOTTLENECK: Storage: MBR partition scheme on >2TB disk disk2 (data loss risk)
+BOTTLENECK: Storage: SMART failure detected on disk0
+BOTTLENECK: Disk: High disk usage on root volume (92%)
+BOTTLENECK: Disk: High I/O wait - 8 processes in uninterruptible sleep
+```
+
+</details>
+
+<details>
 <summary><strong>Database Issues</strong></summary>
 
 - **High connection counts:**
@@ -761,6 +804,55 @@ mongosh --username admin --password
 
 </details>
 
+<details>
+<summary><strong>Storage Profiling Tools</strong></summary>
+
+The script uses native macOS tools for storage analysis:
+
+| Tool | Purpose | Source |
+|------|---------|--------|
+| diskutil | Disk/volume management, partition schemes | Native macOS |
+| system_profiler | Hardware info (NVMe, T2 chip detection) | Native macOS |
+| nvram | Secure Boot policy (T2 Macs) | Native macOS |
+| bless | Boot volume information | Native macOS |
+| fdesetup | FileVault status | Native macOS |
+| df | Filesystem capacity | Native macOS |
+| du | Directory sizes | Native macOS |
+| tmutil | Time Machine snapshot analysis | Native macOS |
+| mount | Mount point information | Native macOS |
+
+**Partition Scheme Detection:**
+- **GPT** (GUID Partition Table) - Modern, required for macOS 10.11+
+- **MBR** (Master Boot Record) - Legacy, 2TB limit (warns if >2TB disk)
+- **APM** (Apple Partition Map) - Legacy PowerPC format
+
+**Filesystem Detection:**
+- **APFS** - Modern Apple filesystem with encryption, snapshots, space sharing
+- **HFS+** - Legacy Mac filesystem (migration to APFS recommended)
+- **exFAT/FAT32** - Cross-platform for external drives
+- **NTFS** - Windows (read-only by default on macOS)
+
+**Boot Configuration Detection:**
+- Apple Silicon: Always Secure Boot via iBoot
+- Intel T2 Macs: Full/Medium/No Security modes
+- Intel non-T2: UEFI without Secure Boot
+
+**Optional (via Homebrew):**
+
+| Tool | Purpose | Install Command |
+|------|---------|-----------------|
+| smartctl | Detailed SMART data | `brew install smartmontools` |
+
+**Manual installation:**
+```bash
+# Install smartmontools for detailed SMART analysis
+brew install smartmontools
+```
+
+The script will function without smartmontools but will provide less detailed SMART information (using diskutil's basic SMART status instead).
+
+</details>
+
 ---
 
 ## 📦 **What's Included**
@@ -830,6 +922,22 @@ For AWS-specific issues on EC2 Mac instances, the tool can automatically create 
 ---
 
 ## 📝 **Version History**
+
+- **v1.2** (February 2026) - Added partition scheme and boot configuration detection
+  - Partition scheme analysis (GPT vs MBR vs APM with >2TB warnings)
+  - Boot configuration (Apple Silicon iBoot, Intel UEFI, T2 Secure Boot status)
+  - Filesystem type detection (APFS, HFS+, exFAT, FAT32, NTFS)
+  - APFS feature detection (FileVault, snapshots, space sharing)
+
+- **v1.1** (February 2026) - Added comprehensive storage profiling
+  - APFS container and CoreStorage analysis
+  - SSD/HDD/Fusion Drive/NVMe detection
+  - SMART health monitoring
+  - Capacity profiling (directories, files, applications, caches)
+  - Time Machine snapshot analysis
+  - Network storage detection (NFS, SMB, AFP)
+  - Storage performance baseline testing
+  - AWS EC2 Mac EBS optimization recommendations
 
 - **v1.0** (January 2026) - Initial release
   - Automatic Homebrew installation
