@@ -84,6 +84,7 @@ sudo ./invoke-macos-forensics.sh
 - Top 10 CPU-consuming processes
 - Automatic detection of high CPU usage (>80%)
 - Automatic detection of high load per core (>2.0)
+- **SAR CPU analysis:** Real-time sampling (sar -u)
 
 **Memory Forensics:**
 - Memory statistics via vm_stat
@@ -92,11 +93,13 @@ sudo ./invoke-macos-forensics.sh
 - Top 10 memory-consuming processes
 - Automatic detection of low memory (<10% free)
 - Automatic detection of high swap usage (>1GB)
+- **SAR paging analysis:** Real-time sampling (sar -g, sar -p)
 
 **Disk Forensics:**
 - Disk usage analysis
 - Disk I/O statistics via iostat
 - Automatic detection of high disk usage (>90%)
+- **SAR disk analysis:** Real-time sampling (sar -d)
 
 **Storage Profiling:**
 - **Partition scheme analysis** (GPT vs MBR with >2TB warnings, APM detection)
@@ -125,6 +128,9 @@ sudo ./invoke-macos-forensics.sh
 - Network interface configuration
 - Network statistics
 - Active connection monitoring
+- **SAR network analysis:** Real-time sampling (sar -n DEV)
+
+**Note on macOS SAR:** Unlike Linux sysstat, macOS does not automatically collect historical SAR data. The built-in sar command provides real-time sampling only with limited options compared to Linux. For continuous data collection, use: `sar -o /tmp/sardata.bin -u 60 &`
 
 **Database Forensics:**
 - Automatic detection of running databases

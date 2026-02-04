@@ -256,6 +256,27 @@ analyze_cpu() {
         BOTTLENECKS+=("CPU: High load per core (${load_per_core})")
     fi
     
+    # ==========================================================================
+    # SAR CPU ANALYSIS (macOS)
+    # ==========================================================================
+    if command -v sar >/dev/null 2>&1; then
+        echo "" | tee -a "$OUTPUT_FILE"
+        echo "--- SAR CPU ANALYSIS ---" | tee -a "$OUTPUT_FILE"
+        
+        # Real-time CPU sampling
+        echo "" | tee -a "$OUTPUT_FILE"
+        echo "CPU Utilization (sar -u, 5 samples):" | tee -a "$OUTPUT_FILE"
+        sar -u 1 5 2>/dev/null | tee -a "$OUTPUT_FILE" || log_warning "sar -u failed"
+        
+        # Note: macOS sar doesn't auto-collect historical data like Linux sysstat
+        echo "" | tee -a "$OUTPUT_FILE"
+        echo "Note: macOS does not auto-collect historical sar data." | tee -a "$OUTPUT_FILE"
+        echo "For continuous collection, use: sar -o /tmp/sardata.bin -u 60 &" | tee -a "$OUTPUT_FILE"
+    else
+        echo "" | tee -a "$OUTPUT_FILE"
+        echo "sar not available on this system" | tee -a "$OUTPUT_FILE"
+    fi
+    
     log_success "CPU forensics completed"
 }
 
@@ -298,6 +319,24 @@ analyze_memory() {
         if (( $(echo "$swap_gb > 1.0" | bc -l) )); then
             BOTTLENECKS+=("Memory: High swap usage (${swap_used})")
         fi
+    fi
+    
+    # ==========================================================================
+    # SAR MEMORY/PAGING ANALYSIS (macOS)
+    # ==========================================================================
+    if command -v sar >/dev/null 2>&1; then
+        echo "" | tee -a "$OUTPUT_FILE"
+        echo "--- SAR MEMORY/PAGING ANALYSIS ---" | tee -a "$OUTPUT_FILE"
+        
+        # Page-out activity (memory pressure indicator)
+        echo "" | tee -a "$OUTPUT_FILE"
+        echo "Page-out Activity (sar -g, 5 samples):" | tee -a "$OUTPUT_FILE"
+        sar -g 1 5 2>/dev/null | tee -a "$OUTPUT_FILE" || log_warning "sar -g failed"
+        
+        # Page-in activity
+        echo "" | tee -a "$OUTPUT_FILE"
+        echo "Page-in Activity (sar -p, 5 samples):" | tee -a "$OUTPUT_FILE"
+        sar -p 1 5 2>/dev/null | tee -a "$OUTPUT_FILE" || log_warning "sar -p failed"
     fi
     
     log_success "Memory forensics completed"
@@ -358,6 +397,19 @@ analyze_disk() {
     local io_wait_procs=$(ps aux | awk '$8 ~ /D/' | wc -l | tr -d ' ')
     if (( io_wait_procs > 5 )); then
         BOTTLENECKS+=("Disk: High I/O wait - ${io_wait_procs} processes in uninterruptible sleep")
+    fi
+    
+    # ==========================================================================
+    # SAR DISK I/O ANALYSIS (macOS)
+    # ==========================================================================
+    if command -v sar >/dev/null 2>&1; then
+        echo "" | tee -a "$OUTPUT_FILE"
+        echo "--- SAR DISK I/O ANALYSIS ---" | tee -a "$OUTPUT_FILE"
+        
+        # Disk activity
+        echo "" | tee -a "$OUTPUT_FILE"
+        echo "Disk Activity (sar -d, 5 samples):" | tee -a "$OUTPUT_FILE"
+        sar -d 1 5 2>/dev/null | tee -a "$OUTPUT_FILE" || log_warning "sar -d failed"
     fi
     
     log_success "Disk forensics completed"
@@ -1036,6 +1088,24 @@ analyze_network() {
     echo "" | tee -a "$OUTPUT_FILE"
     echo "Active Network Connections (top 20):" | tee -a "$OUTPUT_FILE"
     netstat -an | head -21 | tee -a "$OUTPUT_FILE"
+    
+    # ==========================================================================
+    # SAR NETWORK ANALYSIS (macOS)
+    # ==========================================================================
+    if command -v sar >/dev/null 2>&1; then
+        echo "" | tee -a "$OUTPUT_FILE"
+        echo "--- SAR NETWORK ANALYSIS ---" | tee -a "$OUTPUT_FILE"
+        
+        # Network throughput
+        echo "" | tee -a "$OUTPUT_FILE"
+        echo "Network Throughput (sar -n DEV, 5 samples):" | tee -a "$OUTPUT_FILE"
+        sar -n DEV 1 5 2>/dev/null | tee -a "$OUTPUT_FILE" || log_warning "sar -n DEV failed"
+        
+        # Note about macOS sar limitations
+        echo "" | tee -a "$OUTPUT_FILE"
+        echo "Note: macOS sar has limited options compared to Linux sysstat." | tee -a "$OUTPUT_FILE"
+        echo "For more detailed network analysis, consider: nettop, netstat -s, or tcpdump" | tee -a "$OUTPUT_FILE"
+    fi
     
     log_success "Network forensics completed"
 }
