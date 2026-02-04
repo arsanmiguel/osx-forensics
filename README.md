@@ -8,12 +8,14 @@ A comprehensive Bash-based diagnostic tool for macOS that automatically detects 
 **Key Features:**
 - ✅ Comprehensive performance forensics (CPU, Memory, Disk, Network, Database)
 - ✅ **Storage profiling** (partition schemes, boot config, APFS/CoreStorage, SSD/HDD/Fusion, SMART health)
+- ✅ **Enhanced profiling tools** - htop, btop, glances (auto-installed via Homebrew)
 - ✅ Automated bottleneck detection
 - ✅ **Automatic Homebrew installation** if not present
-- ✅ **Automatic AWS CLI installation** via Homebrew when needed
-- ✅ CPU forensics (load average analysis, top consumers, process tracking)
+- ✅ **Automatic utility installation** via Homebrew when needed
+- ✅ CPU forensics (load average analysis, top consumers, htop/btop profiling)
 - ✅ Memory forensics (pressure detection, swap analysis, top consumers)
-- ✅ Disk I/O analysis (usage, performance metrics)
+- ✅ Disk I/O analysis (iostat, vm_stat, iotop)
+- ✅ **Glances system overview** - comprehensive real-time monitoring snapshot
 - ✅ **Database forensics** - DBA-level query analysis + DMS readiness checks
 - ✅ Network analysis (connection states, interface statistics)
 - ✅ **Automatic AWS Support case creation** with diagnostic data
@@ -80,8 +82,10 @@ sudo ./invoke-macos-forensics.sh
 **CPU Forensics:**
 - Load average analysis (1m, 5m, 15m)
 - Load per core calculation
-- CPU utilization sampling
+- CPU utilization sampling via `top`
 - Top 10 CPU-consuming processes
+- **htop snapshot** - enhanced process view with CPU/memory bars
+- **btop availability** - modern resource monitor with graphs
 - Automatic detection of high CPU usage (>80%)
 - Automatic detection of high load per core (>2.0)
 - **SAR CPU analysis:** Real-time sampling (sar -u)
@@ -131,6 +135,11 @@ sudo ./invoke-macos-forensics.sh
 - **SAR network analysis:** Real-time sampling (sar -n DEV)
 
 **Note on macOS SAR:** Unlike Linux sysstat, macOS does not automatically collect historical SAR data. The built-in sar command provides real-time sampling only with limited options compared to Linux. For continuous data collection, use: `sar -o /tmp/sardata.bin -u 60 &`
+
+**Glances System Overview:**
+- Comprehensive system snapshot (CPU, memory, load, disk I/O, network)
+- JSON export for detailed analysis (in deep mode)
+- Real-time monitoring available via interactive mode
 
 **Database Forensics:**
 - Automatic detection of running databases
@@ -874,6 +883,39 @@ brew install smartmontools
 The script will function without smartmontools but will provide less detailed SMART information (using diskutil's basic SMART status instead).
 
 </details>
+
+---
+
+## 🔧 **Profiling Tools**
+
+The script automatically installs these enhanced profiling tools via Homebrew:
+
+| Tool | Purpose | Homebrew Package |
+|------|---------|------------------|
+| **htop** | Interactive process viewer with CPU/memory bars | `htop` |
+| **btop** | Modern resource monitor with graphs and history | `btop` |
+| **glances** | Comprehensive system monitoring (CPU, mem, disk, network) | `glances` |
+| **iotop** | I/O monitoring by process | `iotop` |
+| **smartmontools** | Disk SMART health data | `smartmontools` |
+
+**Native macOS Tools Used:**
+- `top` - Process and CPU sampling
+- `vm_stat` - Virtual memory statistics
+- `iostat` - Disk I/O statistics
+- `diskutil` - Disk and volume information
+- `system_profiler` - Hardware and storage details
+- `memory_pressure` - Memory pressure analysis
+
+**Manual Installation:**
+```bash
+# Install all enhanced profiling tools
+brew install htop btop glances iotop smartmontools
+
+# Or install individually
+brew install htop
+brew install btop
+brew install glances
+```
 
 ---
 

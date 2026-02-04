@@ -141,6 +141,9 @@ check_required_utilities() {
         "netstat:native"
         "ps:native"
         "iotop:iotop"
+        "htop:htop"
+        "btop:btop"
+        "glances:glances"
     )
     
     for util_pair in "${utilities[@]}"; do
@@ -213,6 +216,48 @@ gather_system_info() {
 }
 
 #############################################################################
+# Glances System Overview
+#############################################################################
+
+analyze_glances_overview() {
+    if command -v glances >/dev/null 2>&1; then
+        echo "" | tee -a "$OUTPUT_FILE"
+        echo "================================================================================" | tee -a "$OUTPUT_FILE"
+        echo "  GLANCES SYSTEM OVERVIEW" | tee -a "$OUTPUT_FILE"
+        echo "================================================================================" | tee -a "$OUTPUT_FILE"
+        echo "" | tee -a "$OUTPUT_FILE"
+        
+        log_info "Capturing glances system snapshot..."
+        
+        # Glances stdout mode with 1 iteration
+        echo "System Snapshot (glances --stdout cpu,mem,load,diskio,network):" | tee -a "$OUTPUT_FILE"
+        glances --stdout cpu,mem,load,diskio,network -1 2>/dev/null | tee -a "$OUTPUT_FILE" || \
+        echo "  glances stdout capture not available" | tee -a "$OUTPUT_FILE"
+        
+        # Export to JSON for detailed analysis if in deep mode
+        if [[ "$MODE" == "deep" ]]; then
+            local glances_json="/tmp/glances_snapshot_$(date +%Y%m%d_%H%M%S).json"
+            echo "" | tee -a "$OUTPUT_FILE"
+            echo "Exporting detailed snapshot to: ${glances_json}" | tee -a "$OUTPUT_FILE"
+            glances --export json --export-json-file "$glances_json" -1 2>/dev/null || true
+            
+            if [[ -f "$glances_json" ]]; then
+                echo "  JSON export successful - attach to support case for detailed analysis" | tee -a "$OUTPUT_FILE"
+            fi
+        fi
+        
+        echo "" | tee -a "$OUTPUT_FILE"
+        echo "Tip: Run 'glances' interactively for real-time monitoring with:" | tee -a "$OUTPUT_FILE"
+        echo "  - CPU, memory, disk, network graphs" | tee -a "$OUTPUT_FILE"
+        echo "  - Per-process resource usage" | tee -a "$OUTPUT_FILE"
+        echo "  - Docker/container monitoring" | tee -a "$OUTPUT_FILE"
+        echo "  - Alerts and thresholds" | tee -a "$OUTPUT_FILE"
+        
+        log_success "Glances overview completed"
+    fi
+}
+
+#############################################################################
 # CPU Forensics
 #############################################################################
 
@@ -243,6 +288,24 @@ analyze_cpu() {
     echo "" | tee -a "$OUTPUT_FILE"
     echo "Top 10 CPU-consuming processes:" | tee -a "$OUTPUT_FILE"
     ps aux | sort -rk 3 | head -11 | tee -a "$OUTPUT_FILE"
+    
+    # ==========================================================================
+    # ENHANCED CPU PROFILING (htop/btop)
+    # ==========================================================================
+    if command -v htop >/dev/null 2>&1; then
+        echo "" | tee -a "$OUTPUT_FILE"
+        echo "--- HTOP CPU SNAPSHOT ---" | tee -a "$OUTPUT_FILE"
+        # htop batch mode - capture current state
+        htop -C --no-color -d 10 -n 1 2>/dev/null | head -30 | tee -a "$OUTPUT_FILE" || \
+        echo "  htop batch capture not available (interactive mode only)" | tee -a "$OUTPUT_FILE"
+    fi
+    
+    if command -v btop >/dev/null 2>&1; then
+        echo "" | tee -a "$OUTPUT_FILE"
+        echo "--- BTOP AVAILABLE ---" | tee -a "$OUTPUT_FILE"
+        echo "  btop installed - run 'btop' for interactive system monitoring" | tee -a "$OUTPUT_FILE"
+        echo "  Features: CPU, memory, disk, network graphs with historical data" | tee -a "$OUTPUT_FILE"
+    fi
     
     # Check for high CPU usage
     local cpu_idle=$(top -l 1 -n 0 | grep "CPU usage" | awk '{print $7}' | sed 's/%//')
@@ -1518,6 +1581,7 @@ main() {
     check_required_utilities
     
     gather_system_info
+    analyze_glances_overview
     
     case "$MODE" in
         quick)
