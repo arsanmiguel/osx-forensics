@@ -229,29 +229,16 @@ analyze_glances_overview() {
         
         log_info "Capturing glances system snapshot..."
         
-        # Glances stdout mode with 1 iteration
-        echo "System Snapshot (glances --stdout cpu,mem,load,diskio,network):" | tee -a "$OUTPUT_FILE"
-        glances --stdout cpu,mem,load,diskio,network -1 2>/dev/null | tee -a "$OUTPUT_FILE" || \
-        echo "  glances stdout capture not available" | tee -a "$OUTPUT_FILE"
-        
-        # Export to JSON for detailed analysis if in deep mode
-        if [[ "$MODE" == "deep" ]]; then
-            local glances_json="/tmp/glances_snapshot_$(date +%Y%m%d_%H%M%S).json"
-            echo "" | tee -a "$OUTPUT_FILE"
-            echo "Exporting detailed snapshot to: ${glances_json}" | tee -a "$OUTPUT_FILE"
-            glances --export json --export-json-file "$glances_json" -1 2>/dev/null || true
-            
-            if [[ -f "$glances_json" ]]; then
-                echo "  JSON export successful - attach to support case for detailed analysis" | tee -a "$OUTPUT_FILE"
-            fi
-        fi
-        
+        # Glances system summary - note interactive use only
+        # (macOS glances --stdout doesn't exit cleanly in batch mode)
+        echo "Glances is installed and available for interactive monitoring." | tee -a "$OUTPUT_FILE"
         echo "" | tee -a "$OUTPUT_FILE"
-        echo "Tip: Run 'glances' interactively for real-time monitoring with:" | tee -a "$OUTPUT_FILE"
+        echo "Usage: Run 'glances' for real-time monitoring with:" | tee -a "$OUTPUT_FILE"
         echo "  - CPU, memory, disk, network graphs" | tee -a "$OUTPUT_FILE"
         echo "  - Per-process resource usage" | tee -a "$OUTPUT_FILE"
         echo "  - Docker/container monitoring" | tee -a "$OUTPUT_FILE"
         echo "  - Alerts and thresholds" | tee -a "$OUTPUT_FILE"
+        echo "  - Web server mode: glances -w" | tee -a "$OUTPUT_FILE"
         
         log_success "Glances overview completed"
     fi
@@ -287,17 +274,17 @@ analyze_cpu() {
     # Top CPU consumers
     echo "" | tee -a "$OUTPUT_FILE"
     echo "Top 10 CPU-consuming processes:" | tee -a "$OUTPUT_FILE"
-    ps aux | sort -rk 3 | head -11 | tee -a "$OUTPUT_FILE"
+    { ps aux | sort -rk 3 | head -11 || true; } | tee -a "$OUTPUT_FILE"
     
     # ==========================================================================
     # ENHANCED CPU PROFILING (htop/btop)
     # ==========================================================================
     if command -v htop >/dev/null 2>&1; then
         echo "" | tee -a "$OUTPUT_FILE"
-        echo "--- HTOP CPU SNAPSHOT ---" | tee -a "$OUTPUT_FILE"
-        # htop batch mode - capture current state
-        htop -C --no-color -d 10 -n 1 2>/dev/null | head -30 | tee -a "$OUTPUT_FILE" || \
-        echo "  htop batch capture not available (interactive mode only)" | tee -a "$OUTPUT_FILE"
+        echo "--- HTOP AVAILABLE ---" | tee -a "$OUTPUT_FILE"
+        echo "  htop installed - run 'sudo htop' for interactive process monitoring" | tee -a "$OUTPUT_FILE"
+        echo "  Features: Per-CPU usage bars, process tree, memory visualization" | tee -a "$OUTPUT_FILE"
+        echo "  Note: htop requires terminal for full output (curses-based)" | tee -a "$OUTPUT_FILE"
     fi
     
     if command -v btop >/dev/null 2>&1; then
@@ -366,7 +353,7 @@ analyze_memory() {
     # Top memory consumers
     echo "" | tee -a "$OUTPUT_FILE"
     echo "Top 10 memory-consuming processes:" | tee -a "$OUTPUT_FILE"
-    ps aux | sort -rk 4 | head -11 | tee -a "$OUTPUT_FILE"
+    { ps aux | sort -rk 4 | head -11 || true; } | tee -a "$OUTPUT_FILE"
     
     # Check memory pressure
     local mem_pressure=$(memory_pressure | grep "System-wide memory free percentage" | awk '{print $5}' | sed 's/%//')
@@ -428,19 +415,20 @@ analyze_disk() {
     iostat -d -c 5 | tee -a "$OUTPUT_FILE"
     
     # I/O wait analysis using iotop if available
+    # macOS iotop syntax: iotop [-C] [-P] [interval [count]]
     if command -v iotop >/dev/null 2>&1; then
         echo "" | tee -a "$OUTPUT_FILE"
         echo "Top I/O Consumers (iotop):" | tee -a "$OUTPUT_FILE"
-        sudo iotop -P -n 10 2>/dev/null | tee -a "$OUTPUT_FILE" || echo "  Unable to run iotop (requires sudo)" | tee -a "$OUTPUT_FILE"
+        iotop -C -P 1 5 2>/dev/null | tee -a "$OUTPUT_FILE" || echo "  Unable to run iotop" | tee -a "$OUTPUT_FILE"
     else
         echo "" | tee -a "$OUTPUT_FILE"
-        echo "iotop not available - install with: brew install iotop" | tee -a "$OUTPUT_FILE"
+        echo "iotop not available (built into macOS, check path)" | tee -a "$OUTPUT_FILE"
     fi
     
     # Disk activity by process
     echo "" | tee -a "$OUTPUT_FILE"
     echo "Processes with High Disk Activity:" | tee -a "$OUTPUT_FILE"
-    ps aux | awk 'NR==1 || $8 ~ /D/' | head -20 | tee -a "$OUTPUT_FILE"
+    { ps aux | awk 'NR==1 || $8 ~ /D/' | head -20 || true; } | tee -a "$OUTPUT_FILE"
     
     # Check disk latency using diskutil
     echo "" | tee -a "$OUTPUT_FILE"
@@ -1022,13 +1010,13 @@ analyze_storage_profile() {
     # Top space consumers
     echo "" | tee -a "$OUTPUT_FILE"
     echo "Top 10 Directories by Size (/):" | tee -a "$OUTPUT_FILE"
-    du -hx -d 1 / 2>/dev/null | sort -rh | head -11 | tee -a "$OUTPUT_FILE"
+    { du -hx -d 1 / 2>/dev/null | sort -rh | head -11 || true; } | tee -a "$OUTPUT_FILE"
     
     # User directory breakdown
     echo "" | tee -a "$OUTPUT_FILE"
     echo "User Home Directory Breakdown:" | tee -a "$OUTPUT_FILE"
     if [[ -d "$HOME" ]]; then
-        du -hx -d 1 "$HOME" 2>/dev/null | sort -rh | head -10 | tee -a "$OUTPUT_FILE"
+        { du -hx -d 1 "$HOME" 2>/dev/null | sort -rh | head -10 || true; } | tee -a "$OUTPUT_FILE"
     fi
     
     # Large files
@@ -1039,7 +1027,7 @@ analyze_storage_profile() {
     # Application sizes
     echo "" | tee -a "$OUTPUT_FILE"
     echo "Largest Applications:" | tee -a "$OUTPUT_FILE"
-    du -sh /Applications/* 2>/dev/null | sort -rh | head -10 | tee -a "$OUTPUT_FILE"
+    { du -sh /Applications/* 2>/dev/null | sort -rh | head -10 || true; } | tee -a "$OUTPUT_FILE"
     
     # Caches and temporary files
     echo "" | tee -a "$OUTPUT_FILE"
@@ -1065,7 +1053,7 @@ analyze_storage_profile() {
     echo "Volume Verification:" | tee -a "$OUTPUT_FILE"
     for vol in $(diskutil list | grep "Apple_APFS" | awk '{print $NF}'); do
         echo "  Checking $vol..." | tee -a "$OUTPUT_FILE"
-        diskutil verifyVolume "$vol" 2>/dev/null | grep -E "appears to be OK|error|invalid" | tee -a "$OUTPUT_FILE"
+        { diskutil verifyVolume "$vol" 2>/dev/null | grep -E "appears to be OK|error|invalid" || true; } | tee -a "$OUTPUT_FILE"
     done
     
     # ==========================================================================
@@ -1145,12 +1133,12 @@ analyze_network() {
     # Network statistics
     echo "" | tee -a "$OUTPUT_FILE"
     echo "Network Statistics:" | tee -a "$OUTPUT_FILE"
-    netstat -s | head -50 | tee -a "$OUTPUT_FILE"
+    { netstat -s | head -50 || true; } | tee -a "$OUTPUT_FILE"
     
     # Active connections
     echo "" | tee -a "$OUTPUT_FILE"
     echo "Active Network Connections (top 20):" | tee -a "$OUTPUT_FILE"
-    netstat -an | head -21 | tee -a "$OUTPUT_FILE"
+    { netstat -an | head -21 || true; } | tee -a "$OUTPUT_FILE"
     
     # ==========================================================================
     # SAR NETWORK ANALYSIS (macOS)
