@@ -1048,12 +1048,19 @@ analyze_storage_profile() {
     echo "" | tee -a "$OUTPUT_FILE"
     echo "--- FILESYSTEM HEALTH ---" | tee -a "$OUTPUT_FILE"
     
-    # Volume verification status
+    # Volume verification status (internal disks only - external can take too long)
     echo "" | tee -a "$OUTPUT_FILE"
     echo "Volume Verification:" | tee -a "$OUTPUT_FILE"
-    for vol in $(diskutil list | grep "Apple_APFS" | awk '{print $NF}'); do
+    echo "  (Verifying internal volumes only - external drives skipped for speed)" | tee -a "$OUTPUT_FILE"
+    
+    # Only verify volumes on disk0 (internal SSD) - external drives take too long
+    for vol in $(diskutil list disk0 2>/dev/null | grep "Apple_APFS" | awk '{print $NF}'); do
         echo "  Checking $vol..." | tee -a "$OUTPUT_FILE"
-        { diskutil verifyVolume "$vol" 2>/dev/null | grep -E "appears to be OK|error|invalid" || true; } | tee -a "$OUTPUT_FILE"
+        if command -v gtimeout >/dev/null 2>&1; then
+            { gtimeout 60 diskutil verifyVolume "$vol" 2>/dev/null | grep -E "appears to be OK|error|invalid" || echo "  Verification timed out or skipped"; } | tee -a "$OUTPUT_FILE"
+        else
+            { diskutil verifyVolume "$vol" 2>/dev/null | grep -E "appears to be OK|error|invalid" || true; } | tee -a "$OUTPUT_FILE"
+        fi
     done
     
     # ==========================================================================
