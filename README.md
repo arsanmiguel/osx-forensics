@@ -929,7 +929,7 @@ brew install glances
 ## 🤝 **Support**
 
 ### **Contact**
-- **Report bugs and feature requests:** [adrianrs@amazon.com](mailto:adrianrs@amazon.com)
+- **Report bugs and feature requests:** [adrianr.sanmiguel@gmail.com](mailto:adrianr.sanmiguel@gmail.com)
 - **GitHub Issues:** Report issues on the GitHub repository
 
 ### **AWS Support**
