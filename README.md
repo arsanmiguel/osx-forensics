@@ -3,7 +3,7 @@
 <a id="overview"></a>
 ## Overview
 
-A comprehensive Bash-based diagnostic tool for macOS that automatically detects performance bottlenecks and can create AWS Support cases with detailed forensic data. Originally created for AWS DMS migration troubleshooting—run on your SOURCE DATABASE SERVER. Now useful for any macOS performance troubleshooting; run on the machine you want to diagnose and optionally open an AWS Support case with full details attached.
+A comprehensive Bash-based diagnostic tool for macOS that automatically detects performance bottlenecks and can create AWS Support cases with detailed forensic data. Originally created for AWS DMS migration troubleshooting; run on your SOURCE DATABASE SERVER. Now useful for any macOS performance troubleshooting; run on the machine you want to diagnose and optionally open an AWS Support case with full details attached.
 
 Key Features:
 
@@ -18,7 +18,7 @@ Key Features:
 - Automatic Homebrew installation if not present; automatic utility installation via Homebrew when needed
 - Enhanced profiling tools: htop, btop, glances (auto-installed via Homebrew)
 
-TL;DR — Run it now
+TL;DR - Run it now
 ```bash
 git clone https://github.com/arsanmiguel/osx-forensics.git && cd osx-forensics
 chmod +x invoke-macos-forensics.sh
@@ -806,22 +806,22 @@ General Guidelines:
 <details>
 <summary><strong>Version History</strong></summary>
 
-- v1.3 (February 2026) – README overhaul
+- v1.3 (February 2026) - README overhaul
   - Structure and flow aligned with linux-forensics/unix-forensics: table of contents (Contents) with anchors, TL;DR, Quick links
   - Replaced long "Available Tool" section with a short blurb; Use Cases and What Bottlenecks are subsections of Examples
   - Section order: Troubleshooting before Configuration; Profiling Tools and Important Notes & Performance are collapsible
   - Removed emojis; slimmed Key Features; consistent section headers and styling; removed What's Included
-- v1.2 (February 2026) – Partition scheme and boot configuration
+- v1.2 (February 2026) - Partition scheme and boot configuration
   - Partition scheme analysis (GPT vs MBR vs APM with >2TB warnings)
   - Boot configuration (Apple Silicon iBoot, Intel UEFI, T2 Secure Boot status)
   - Filesystem type detection (APFS, HFS+, exFAT, FAT32, NTFS)
   - APFS feature detection (FileVault, snapshots, space sharing)
-- v1.1 (February 2026) – Storage profiling
+- v1.1 (February 2026) - Storage profiling
   - APFS container and CoreStorage analysis; SSD/HDD/Fusion Drive/NVMe detection
   - SMART health monitoring; capacity profiling; Time Machine snapshot analysis
   - Network storage detection (NFS, SMB, AFP); storage performance baseline testing
   - AWS EC2 Mac EBS optimization recommendations
-- v1.0 (January 2026) – Initial release
+- v1.0 (January 2026) - Initial release
   - Automatic Homebrew and AWS CLI installation; CPU, Memory, Disk, Network forensics
   - DBA-level database query analysis; AWS Support case integration; automatic bottleneck detection
 
