@@ -803,6 +803,9 @@ General Guidelines:
 <a id="version-history"></a>
 ## Version History
 
+<details>
+<summary><strong>Version History</strong></summary>
+
 - v1.3 (February 2026) – README overhaul
   - Structure and flow aligned with linux-forensics/unix-forensics: table of contents (Contents) with anchors, TL;DR, Quick links
   - Replaced long "Available Tool" section with a short blurb; Use Cases and What Bottlenecks are subsections of Examples
@@ -821,6 +824,8 @@ General Guidelines:
 - v1.0 (January 2026) – Initial release
   - Automatic Homebrew and AWS CLI installation; CPU, Memory, Disk, Network forensics
   - DBA-level database query analysis; AWS Support case integration; automatic bottleneck detection
+
+</details>
 
 ---
 
