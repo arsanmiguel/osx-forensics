@@ -3,7 +3,7 @@
 <a id="overview"></a>
 ## Overview
 
-A comprehensive Bash-based diagnostic tool for macOS that automatically detects performance bottlenecks and can create AWS Support cases with detailed forensic data. Originally created for AWS DMS migration troubleshooting; run on your SOURCE DATABASE SERVER. Now useful for any macOS performance troubleshooting; run on the machine you want to diagnose and optionally open an AWS Support case with full details attached.
+A comprehensive Bash-based diagnostic tool for macOS that automatically detects performance bottlenecks and can create AWS Support cases with detailed forensic data. Originally created for AWS DMS migration troubleshooting; run on your SOURCE DATABASE SERVER. If you are still using this for that purpose, be absolutely certain you run it on your source database server (the host where the database under migration actually runs)—not on a jump box, bastion, or the DMS replication instance alone. Now useful for any macOS performance troubleshooting; run on the machine you want to diagnose and optionally open an AWS Support case with full details attached.
 
 Key Features:
 
@@ -166,6 +166,8 @@ Use case: Diagnosing slow database queries or connection issues
 <summary><strong>AWS DMS Migrations</strong></summary>
 
 This tool is designed to run on your SOURCE DATABASE SERVER, not on the DMS replication instance (which is AWS-managed).
+
+If you are migrating with DMS, run these diagnostics on the **same macOS host where the source database process lives** (your SOURCE DATABASE SERVER). Running elsewhere yields misleading or empty results.
 
 What it checks for DMS by database type:
 
