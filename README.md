@@ -639,7 +639,7 @@ The tool can automatically create AWS Support cases when performance issues are 
 <summary><strong>Setup Instructions</strong></summary>
 
 Prerequisites:
-- AWS account with Business or Enterprise Support plan
+- AWS account with Business, Enterprise On-Ramp, or Enterprise Support plan
 - IAM user with Support API permissions
 
 Setup Steps:
@@ -658,6 +658,8 @@ Enter your:
 - AWS Secret Access Key
 - Default region (e.g., us-east-1)
 - Default output format (json)
+
+Use a named profile if you prefer: `aws configure --profile forensics` and export `AWS_PROFILE=forensics` before running the script.
 
 3. Verify Support API access:
 ```bash
@@ -692,6 +694,8 @@ sudo ./invoke-macos-forensics.sh -m deep -s -v urgent
 
 # Available severity levels: low, normal, high, urgent, critical
 ```
+
+Important: AWS Support API access requires a Business, Enterprise On-Ramp, or Enterprise Support plan. If you don't have one of these plans, the script will detect the API access error, skip support case creation, and still save the diagnostic report locally.
 
 </details>
 
